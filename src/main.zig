@@ -16,34 +16,43 @@ const screen_title: [*c]const u8 = "working-title";
 const SdlContext = struct {
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
+
+    pub fn deinit(self: SdlContext) void {
+        c.SDL_DestroyRenderer(self.renderer);
+        c.SDL_DestroyWindow(self.window);
+        c.SDL_Quit();
+    }
 };
 
-fn sdlInit() !SdlContext {
-    // WARNING: Caller needs to free destroy these
+fn initSdl() !SdlContext {
     var window: ?*c.SDL_Window = null;
     var renderer: ?*c.SDL_Renderer = null;
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
+        std.debug.print("SDL_Init failed: {s}\n", .{c.SDL_GetError()});
         return error.SdlInitFailed;
     }
+    errdefer c.SDL_Quit();
 
     if (!c.SDL_CreateWindowAndRenderer(screen_title, screen_width, screen_height, 0, &window, &renderer)) {
-        c.SDL_Quit();
+        std.debug.print("SDL_CreateWindowAndRenderer failed: {s}\n", .{c.SDL_GetError()});
         return error.SdlWindowCreationFailed;
     }
 
+    if (window == null or renderer == null) {
+        return error.SdlInvalidState;
+    }
+
     return SdlContext{
-        .window = window orelse unreachable,
-        .renderer = renderer orelse unreachable,
+        .window = window.?,
+        .renderer = renderer.?,
     };
 }
 
 pub fn main() !void {
-    const sdl_context = try sdlInit();
+    const sdl_context = try initSdl();
     // NOTE: Defer runs in backwards order
-    defer c.SDL_Quit();
-    defer c.SDL_DestroyWindow(sdl_context.window);
-    defer c.SDL_DestroyRenderer(sdl_context.renderer);
+    defer sdl_context.deinit();
 
     // TODO: Handle this better, just for debugging rn
     _ = c.SDL_RenderPresent(sdl_context.renderer);
