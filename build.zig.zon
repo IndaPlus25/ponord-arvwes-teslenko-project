@@ -1,6 +1,12 @@
 .{
     .name = .ponord_arvwes_teslenko_project,
     .version = "0.0.1",
+    .dependencies = .{
+        .sdl = .{
+            .url = "git+https://github.com/castholm/SDL.git#95980cb420254ff4578657a5a85abfb44046507a",
+            .hash = "sdl-0.4.1+3.4.2-SDL--umApAGq9hhwKcquz9eEQtR1x7S3pnQUe2mNpjVj",
+        },
+    },
     .minimum_zig_version = "0.15.2",
     .paths = .{""},
     .fingerprint = 0x9b000d94f4bc51fb,

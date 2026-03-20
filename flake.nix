@@ -19,9 +19,24 @@
           zls
         ];
 
-        buildInputs = with pkgs; [];
+        buildInputs = with pkgs; [
+          sdl3
+        ];
       in {
-        devShells.default = pkgs.mkShell {inherit nativeBuildInputs buildInputs;};
+        devShells.default = pkgs.mkShell {
+          inherit nativeBuildInputs buildInputs;
+            shellHook = ''
+              export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath (with pkgs; [
+                libGL
+                wayland
+                libxkbcommon
+                xorg.libX11
+                xorg.libXcursor
+                xorg.libXrandr
+                xorg.libXi
+              ])}:$LD_LIBRARY_PATH
+            '';
+        };
 
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "wip non euclidian renderer";
