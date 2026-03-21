@@ -20,7 +20,6 @@ const SdlContext = struct {
     pub fn deinit(self: SdlContext) void {
         c.SDL_DestroyRenderer(self.renderer);
         c.SDL_DestroyWindow(self.window);
-        c.SDL_Quit();
     }
 };
 
@@ -39,10 +38,7 @@ fn initSdl() !SdlContext {
         return error.SdlWindowCreationFailed;
     }
 
-    if (window == null or renderer == null) {
-        return error.SdlInvalidState;
-    }
-
+    // We can unwrap safely because of the assertion above
     return SdlContext{
         .window = window.?,
         .renderer = renderer.?,
@@ -51,11 +47,24 @@ fn initSdl() !SdlContext {
 
 pub fn main() !void {
     const sdl_context = try initSdl();
-    // NOTE: Defer runs in backwards order
+    // NOTE: Defer runs in reverse order.
+    defer c.SDL_Quit();
     defer sdl_context.deinit();
 
-    // TODO: Handle this better, just for debugging rn
-    _ = c.SDL_RenderPresent(sdl_context.renderer);
-    c.SDL_Delay(2000);
-    std.debug.print("Successfully initialized SDL!", .{});
+    var is_running: bool = true;
+    var event: c.SDL_Event = undefined;
+
+    // TODO: This is kinda stupid, most of these can throw errors
+    // so we probably want to look into what to handle explicitly
+    while (is_running) {
+        while (c.SDL_PollEvent(&event)) {
+            if (event.type == c.SDL_EVENT_QUIT) {
+                is_running = false;
+            }
+        }
+
+        _ = c.SDL_SetRenderDrawColor(sdl_context.renderer, 255, 255, 255, 255);
+        _ = c.SDL_RenderClear(sdl_context.renderer);
+        _ = c.SDL_RenderPresent(sdl_context.renderer);
+    }
 }
