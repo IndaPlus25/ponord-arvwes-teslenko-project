@@ -45,6 +45,47 @@ fn initSdl() !SdlContext {
     };
 }
 
+const Point2D = struct {
+    x: isize,
+    y: isize,
+};
+
+//TODO create a framebuffer to Plot points to
+//TODO create tests for drawLine function and optimize
+/// drawLine plots a 1 pixel wide line between a start and end point using
+/// Bresenham's line algorithm (https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm)
+fn drawLine(start: Point2D, end: Point2D) !void {
+    var x0 = start.x;
+    var y0 = start.y;
+    const x1 = end.x;
+    const y1 = end.y;
+
+    const dx: isize = @intCast(@abs(x1 - x0));
+    const dy: isize = @intCast(-@abs(y1 - y0));
+
+    // draw lines start to end
+    const sx: isize = if (x0 < x1) 1 else -1;
+    const sy: isize = if (y0 < y1) 1 else -1;
+
+    var err = dx + dy;
+
+    while (true) {
+        //TODO plot(x0, y0);
+
+        const e2 = 2 * err;
+        if (e2 >= dy) {
+            if (x0 == x1) break;
+            err += dy;
+            x0 += sx;
+        }
+        if (e2 <= dx) {
+            if (y0 == y1) break;
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
 pub fn main() !void {
     const sdl_context = try initSdl();
     // NOTE: Defer runs in reverse order.
