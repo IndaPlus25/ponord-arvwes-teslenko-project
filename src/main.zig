@@ -83,6 +83,10 @@ const Vec3 = struct {
     fn proj(u: Vec3, v: Vec3) Vec3 {
         return mul(u.dot(v) / v.dot(v), v);
     }
+
+    fn norm(self: Vec3) Vec3 {
+        return mul(1.0/self.len(), self);        
+    }
 };
 
 const Point2D = struct {
