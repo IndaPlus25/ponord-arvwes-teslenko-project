@@ -19,9 +19,9 @@ const SdlContext = struct {
     texture: *c.SDL_Texture,
 
     pub fn deinit(self: SdlContext) void {
+        c.SDL_DestroyTexture(self.texture);
         c.SDL_DestroyRenderer(self.renderer);
         c.SDL_DestroyWindow(self.window);
-        c.SDL_DestroyTexture(self.texture);
     }
 };
 
@@ -48,7 +48,6 @@ fn initSdl() !SdlContext {
         return error.SdlCreateTextureFailed;
     }
 
-    // We can unwrap safely because of the assertion above
     return SdlContext{ .window = window.?, .renderer = renderer.?, .texture = texture.? };
 }
 
@@ -57,27 +56,24 @@ const Point2D = struct {
     y: isize,
 };
 
-//TODO create a framebuffer to Plot points to
-//TODO create tests for drawLine function and optimize
-/// drawLine plots a 1 pixel wide line between a start and end point using
-/// Bresenham's line algorithm (https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm)
-fn drawLine(start: Point2D, end: Point2D) !void {
+//TODO: Clean up this code if possible, optimize & test
+fn drawLine(start: Point2D, end: Point2D, frame_buffer: [*]u32, stride: usize, color: u32) void {
     var x0 = start.x;
     var y0 = start.y;
     const x1 = end.x;
     const y1 = end.y;
 
-    const dx: isize = @intCast(@abs(x1 - x0));
-    const dy: isize = @intCast(-@abs(y1 - y0));
-
-    // draw lines start to end
+    const dx: isize = @as(isize, @intCast(@abs(x1 - x0)));
+    const dy: isize = -@as(isize, @intCast(@abs(y1 - y0)));
     const sx: isize = if (x0 < x1) 1 else -1;
     const sy: isize = if (y0 < y1) 1 else -1;
 
     var err = dx + dy;
 
     while (true) {
-        //TODO plot(x0, y0);
+        if (x0 >= 0 and x0 < screen_width and y0 >= 0 and y0 < screen_height) {
+            frame_buffer[@as(usize, @intCast(y0)) * stride + @as(usize, @intCast(x0))] = color;
+        }
 
         const e2 = 2 * err;
         if (e2 >= dy) {
@@ -95,7 +91,6 @@ fn drawLine(start: Point2D, end: Point2D) !void {
 
 pub fn main() !void {
     const sdl_context = try initSdl();
-    // NOTE: Defer runs in reverse order.
     defer c.SDL_Quit();
     defer sdl_context.deinit();
 
@@ -114,16 +109,20 @@ pub fn main() !void {
             }
         }
 
-        // pixels is the pointer to the raw memory where the pixels live
-        // pitch is the number of bytes PER ROW so we know how many steps to take
+        // Pixels is pointer to memory
+        // Pitch is the number of bytes per row
         _ = c.SDL_LockTexture(sdl_context.texture, null, &pixels, &pitch);
 
-        // This allows us to index into the pixel array and modify it
         const pixel_data: [*]u32 = @ptrCast(@alignCast(pixels.?));
         const stride = @divExact(@as(usize, @intCast(pitch)), 4);
         @memset(pixel_data[0 .. stride * screen_height], 0);
 
-        // Draw
+        // DO STUFF HERE
+        // Draw line for debugging
+        const color: u32 = 0xFF0000FF;
+        drawLine(Point2D{ .x = 10, .y = 10 }, Point2D{ .x = 200, .y = 150 }, pixel_data, stride, color);
+
+        // Render to screen
         _ = c.SDL_UnlockTexture(sdl_context.texture);
         _ = c.SDL_RenderTexture(sdl_context.renderer, sdl_context.texture, null, null);
         _ = c.SDL_RenderPresent(sdl_context.renderer);
