@@ -16,8 +16,10 @@ const screen_title: [*c]const u8 = "working-title";
 const SdlContext = struct {
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
+    texture: *c.SDL_Texture,
 
     pub fn deinit(self: SdlContext) void {
+        c.SDL_DestroyTexture(self.texture);
         c.SDL_DestroyRenderer(self.renderer);
         c.SDL_DestroyWindow(self.window);
     }
@@ -26,6 +28,7 @@ const SdlContext = struct {
 fn initSdl() !SdlContext {
     var window: ?*c.SDL_Window = null;
     var renderer: ?*c.SDL_Renderer = null;
+    var texture: ?*c.SDL_Texture = null;
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
         std.debug.print("SDL_Init failed: {s}\n", .{c.SDL_GetError()});
@@ -38,11 +41,14 @@ fn initSdl() !SdlContext {
         return error.SdlWindowCreationFailed;
     }
 
-    // We can unwrap safely because of the assertion above
-    return SdlContext{
-        .window = window.?,
-        .renderer = renderer.?,
-    };
+    texture = c.SDL_CreateTexture(renderer, c.SDL_PIXELFORMAT_RGBA8888, c.SDL_TEXTUREACCESS_STREAMING, screen_width, screen_height);
+
+    if (texture == null) {
+        std.debug.print("SDL_CreateTexture failed: {s}\n", .{c.SDL_GetError()});
+        return error.SdlCreateTextureFailed;
+    }
+
+    return SdlContext{ .window = window.?, .renderer = renderer.?, .texture = texture.? };
 }
 
 const Point2D = struct {
@@ -50,27 +56,24 @@ const Point2D = struct {
     y: isize,
 };
 
-//TODO create a framebuffer to Plot points to
-//TODO create tests for drawLine function and optimize
-/// drawLine plots a 1 pixel wide line between a start and end point using
-/// Bresenham's line algorithm (https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm)
-fn drawLine(start: Point2D, end: Point2D) !void {
+//TODO: Clean up this code if possible, optimize & test
+fn drawLine(start: Point2D, end: Point2D, frame_buffer: [*]u32, stride: usize, color: u32) void {
     var x0 = start.x;
     var y0 = start.y;
     const x1 = end.x;
     const y1 = end.y;
 
-    const dx: isize = @intCast(@abs(x1 - x0));
-    const dy: isize = @intCast(-@abs(y1 - y0));
-
-    // draw lines start to end
+    const dx: isize = @as(isize, @intCast(@abs(x1 - x0)));
+    const dy: isize = -@as(isize, @intCast(@abs(y1 - y0)));
     const sx: isize = if (x0 < x1) 1 else -1;
     const sy: isize = if (y0 < y1) 1 else -1;
 
     var err = dx + dy;
 
     while (true) {
-        //TODO plot(x0, y0);
+        if (x0 >= 0 and x0 < screen_width and y0 >= 0 and y0 < screen_height) {
+            frame_buffer[@as(usize, @intCast(y0)) * stride + @as(usize, @intCast(x0))] = color;
+        }
 
         const e2 = 2 * err;
         if (e2 >= dy) {
@@ -88,12 +91,14 @@ fn drawLine(start: Point2D, end: Point2D) !void {
 
 pub fn main() !void {
     const sdl_context = try initSdl();
-    // NOTE: Defer runs in reverse order.
     defer c.SDL_Quit();
     defer sdl_context.deinit();
 
     var is_running: bool = true;
     var event: c.SDL_Event = undefined;
+
+    var pixels: ?*anyopaque = null;
+    var pitch: c_int = 0;
 
     // TODO: This is kinda stupid, most of these can throw errors
     // so we probably want to look into what to handle explicitly
@@ -104,8 +109,22 @@ pub fn main() !void {
             }
         }
 
-        _ = c.SDL_SetRenderDrawColor(sdl_context.renderer, 255, 255, 255, 255);
-        _ = c.SDL_RenderClear(sdl_context.renderer);
+        // Pixels is pointer to memory
+        // Pitch is the number of bytes per row
+        _ = c.SDL_LockTexture(sdl_context.texture, null, &pixels, &pitch);
+
+        const pixel_data: [*]u32 = @ptrCast(@alignCast(pixels.?));
+        const stride = @divExact(@as(usize, @intCast(pitch)), 4);
+        @memset(pixel_data[0 .. stride * screen_height], 0);
+
+        // DO STUFF HERE
+        // Draw line for debugging
+        const color: u32 = 0xFF0000FF;
+        drawLine(Point2D{ .x = 10, .y = 10 }, Point2D{ .x = 200, .y = 150 }, pixel_data, stride, color);
+
+        // Render to screen
+        _ = c.SDL_UnlockTexture(sdl_context.texture);
+        _ = c.SDL_RenderTexture(sdl_context.renderer, sdl_context.texture, null, null);
         _ = c.SDL_RenderPresent(sdl_context.renderer);
     }
 }
