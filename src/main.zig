@@ -129,9 +129,9 @@ pub fn main() !void {
         const p1 = Point2D{ .x = 30, .y = 70 };
         const p2 = Point2D{ .x = 200, .y = 150 };
         const p3 = Point2D{ .x = 300, .y = 50 };
-        try drawTriangle(p1, p2, p3, pixel_data, stride, tri_color);
+        drawTriangle(p1, p2, p3, pixel_data, stride, tri_color);
         const line_color: u32 = 0xFF0000FF;
-        try drawLine(Point2D{ .x = 10, .y = 10 }, Point2D{ .x = 200, .y = 150 }, pixel_data, stride, line_color);
+        drawLine(Point2D{ .x = 10, .y = 10 }, Point2D{ .x = 200, .y = 150 }, pixel_data, stride, line_color);
 
         // Render to screen
         _ = c.SDL_UnlockTexture(sdl_context.texture);
