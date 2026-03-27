@@ -51,6 +51,40 @@ fn initSdl() !SdlContext {
     return SdlContext{ .window = window.?, .renderer = renderer.?, .texture = texture.? };
 }
 
+const Vec3 = struct {
+    x: f32,
+    y: f32,
+    z: f32,
+    //adds 2 vec3
+    fn add(self: Vec3, other: Vec3) Vec3 {
+        return .{ .x = self.x + other.x, .y = self.y + other.y, .z = self.z + self.z };
+    }
+    //returns the difference by subtracts other from self
+    fn sub(self: Vec3, other: Vec3) Vec3 {
+        return .{ .x = self.x - other.x, .y = self.y - other.y, .z = self.z - self.z };
+    }
+    //returns product of a Vec3 and a scalar
+    fn mul(scalar: f32, self: Vec3) Vec3 {
+        return .{ .x = self.x * scalar, .y = self.y * scalar, .z = self.z * scalar };
+    }
+    //returns the dot product of 2 vectors
+    fn dot(self: Vec3, other: Vec3) f32 {
+        return (self.x * other.x) + (self.y * other.y) + (self.z * other.z);
+    }
+    //returns the crossproduct of self and some other vec
+    fn cross(self: Vec3, other: Vec3) Vec3 {
+        return .{ .x = self.y * other.z - self.z * other.y, .y = self.z * other.x - self.x * other.z, .z = self.x * other.y - self.y * other.x };
+    }
+    //returns the len of a vector
+    fn len(self: Vec3) f32 {
+        return .{@sqrt(self.dot(self))};
+    }
+    //returns the projection of a Vec3 u on a Vec3 v
+    fn proj(u: Vec3, v: Vec3) Vec3 {
+        return mul(u.dot(v) / v.dot(v), v);
+    }
+};
+
 const Point2D = struct {
     x: isize,
     y: isize,
