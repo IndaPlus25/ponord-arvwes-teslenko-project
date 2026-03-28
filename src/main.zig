@@ -62,6 +62,7 @@ const Point2D = struct {
     y: isize,
 };
 
+// Draws a hollow triangle between three points using drawLine
 fn drawTriangle(v1: Point2D, v2: Point2D, v3: Point2D, frame_buffer: [*]u32, stride: usize, color: u32) void {
     drawLine(v1, v2, frame_buffer, stride, color);
     drawLine(v1, v3, frame_buffer, stride, color);
