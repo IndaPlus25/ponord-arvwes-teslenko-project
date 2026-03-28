@@ -51,56 +51,20 @@ fn initSdl() !SdlContext {
     return SdlContext{ .window = window.?, .renderer = renderer.?, .texture = texture.? };
 }
 
-const Vec3 = struct {
-    x: f32,
-    y: f32,
-    z: f32,
-
-    fn add(self: Vec3, other: Vec3) Vec3 {
-        return .{ .x = self.x + other.x, .y = self.y + other.y, .z = self.z + other.z };
-    }
-
-    fn sub(self: Vec3, other: Vec3) Vec3 {
-        return .{ .x = self.x - other.x, .y = self.y - other.y, .z = self.z - other.z };
-    }
-
-    fn mul(scalar: f32, self: Vec3) Vec3 {
-        return .{ .x = self.x * scalar, .y = self.y * scalar, .z = self.z * scalar };
-    }
-
-    fn dot(self: Vec3, other: Vec3) f32 {
-        return (self.x * other.x) + (self.y * other.y) + (self.z * other.z);
-    }
-
-    fn cross(self: Vec3, other: Vec3) Vec3 {
-        return .{ .x = self.y * other.z - self.z * other.y, .y = self.z * other.x - self.x * other.z, .z = self.x * other.y - self.y * other.x };
-    }
-
-    fn len(self: Vec3) f32 {
-        return @sqrt(self.dot(self));
-    }
-
-    fn proj(u: Vec3, v: Vec3) Vec3 {
-        return mul(u.dot(v) / v.dot(v), v);
-    }
-
-    fn norm(self: Vec3) Vec3 {
-        return mul(1.0/self.len(), self);        
-    }
-};
-
+// Remove this later and just use a Vec3,
+// we can scale x, y with z component
 const Point2D = struct {
     x: isize,
     y: isize,
 };
-///draws a hollow triangle between three points using drawLine
+
 fn drawTriangle(v1: Point2D, v2: Point2D, v3: Point2D, frame_buffer: [*]u32, stride: usize, color: u32) void {
     drawLine(v1, v2, frame_buffer, stride, color);
     drawLine(v1, v3, frame_buffer, stride, color);
     drawLine(v2, v3, frame_buffer, stride, color);
 }
 
-//TODO: Clean up this code if possible, optimize & test
+// TODO: Clean up this code if possible, optimize & test
 fn drawLine(start: Point2D, end: Point2D, frame_buffer: [*]u32, stride: usize, color: u32) void {
     var x0 = start.x;
     var y0 = start.y;
