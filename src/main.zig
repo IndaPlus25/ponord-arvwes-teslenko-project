@@ -9,6 +9,10 @@ const c = @cImport({
     @cInclude("SDL3/SDL_main.h");
 });
 
+// We can define our math types here for ease of use
+const Vec3 = @import("math.zig").Vec3;
+
+// Program information
 const screen_width: c_int = 640;
 const screen_height: c_int = 480;
 const screen_title: [*c]const u8 = "working-title";
