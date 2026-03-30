@@ -9,6 +9,10 @@ const c = @cImport({
     @cInclude("SDL3/SDL_main.h");
 });
 
+// We can define our math types here for ease of use
+const Vec3 = @import("math.zig").Vec3;
+
+// Program information
 const screen_width: c_int = 640;
 const screen_height: c_int = 480;
 const screen_title: [*c]const u8 = "working-title";
@@ -51,6 +55,8 @@ fn initSdl() !SdlContext {
     return SdlContext{ .window = window.?, .renderer = renderer.?, .texture = texture.? };
 }
 
+// Remove this later and just use a Vec3,
+// we can scale x, y with z component
 const Point2D = struct {
     x: isize,
     y: isize,
@@ -63,7 +69,7 @@ fn drawTriangle(v1: Point2D, v2: Point2D, v3: Point2D, frame_buffer: [*]u32, str
     drawLine(v2, v3, frame_buffer, stride, color);
 }
 
-//TODO: Clean up this code if possible, optimize & test
+// TODO: Clean up this code if possible, optimize & test
 fn drawLine(start: Point2D, end: Point2D, frame_buffer: [*]u32, stride: usize, color: u32) void {
     var x0 = start.x;
     var y0 = start.y;
