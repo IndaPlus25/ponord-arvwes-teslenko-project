@@ -30,16 +30,14 @@ pub const Vec3 = struct {
     }
 
     pub fn proj(u: Vec3, v: Vec3) Vec3 {
-        return mul(u.dot(v) / v.dot(v), v);
+        return v.mul(u.dot(v) / v.dot(v));
     }
 
     pub fn norm(self: Vec3) Vec3 {
-        return mul(1.0 / self.len(), self);
+        return self.mul(1.0 / self.len());
     }
 
-    // t = 0 gets the first point on the line between u, v
-    // t = 0.5 gets the midpoint on the line between u, v...
     pub fn lerp(u: Vec3, v: Vec3, t: f32) Vec3 {
-        return add(mul(t, sub(v, u)), u);
+        return v.sub(u).mul(t).add(u);
     }
 };
