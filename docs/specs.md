@@ -26,14 +26,14 @@ If we have time to, we would like to use non-Euclidean geometry within our raste
 ## Feasibility/weekly plan
 I think the project is feasible given the following timeline. The core rasterization pipeline is well-documented, and it's something that at least one of us has done before. The "stretch goal" is independent of the core MVP, so it won't block progress.
 
-| Week | Focus |
-|------|-------|
-| 1 | Project setup, SDL3 window + framebuffer, basic 2D line/triangle drawing |
-| 2 | Math utilities (vectors, matrices), vertex transformations, wireframe rendering |
-| 3 | Triangle rasterization, Z-buffer, OBJ loading |
-| 4 | Shading, camera controls, basic lighting |
-| 5 | Polish, performance tuning, bug fixes |
-| 6+ | Stretch: non-Euclidean geometry experiments |
+| Week | Focus | Status |
+|------|-------|--------|
+| 1 | SDL3 window, framebuffer, render loop, basic 2D line drawing | Done |
+| 2 | Triangle rasterization (scanline fill), math utilities, backface culling | WIP |
+| 3 | Mat4, matrix operations, screen projection pipeline, per-vertex attribute interpolation, Z-buffer | |
+| 4 | Camera struct with keyboard/mouse controls, OBJ model loading, basic shading and lighting | |
+| 5 | Performance tuning, bug fixes, edge cases, other tooling & testing | |
+| 6+ | Stretch: non-Euclidean geometry experiments | |
 
 ## Division of work (subject to change)
 
