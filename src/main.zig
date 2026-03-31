@@ -85,12 +85,30 @@ fn processEvents(is_running: *bool) void {
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
 
-    const tri_color: u32 = 0x00FF00FF;
-    const p1 = math.Vec3{ .x = 960, .y = 100, .z = 0 };
-    const p2 = math.Vec3{ .x = 400, .y = 900, .z = 0 };
-    const p3 = math.Vec3{ .x = 1520, .y = 900, .z = 0 };
+    // some tests
+    render.fillTriangle(
+        .{ .x = 960, .y = 100, .z = 0 },
+        .{ .x = 400, .y = 900, .z = 0 },
+        .{ .x = 1520, .y = 900, .z = 0 },
+        fb,
+        0x00FF00FF,
+    );
 
-    render.drawTriangle(p1, p2, p3, fb, tri_color);
+    render.fillTriangle(
+        .{ .x = 200, .y = 200, .z = 0 },
+        .{ .x = 100, .y = 400, .z = 0 },
+        .{ .x = 350, .y = 350, .z = 0 },
+        fb,
+        0xFF0000FF,
+    );
+
+    render.fillTriangle(
+        .{ .x = 1400, .y = 200, .z = 0 },
+        .{ .x = 1700, .y = 200, .z = 0 },
+        .{ .x = 1550, .y = 500, .z = 0 },
+        fb,
+        0x0000FFFF,
+    );
 }
 
 fn renderImGui() void {

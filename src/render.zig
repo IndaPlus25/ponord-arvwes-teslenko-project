@@ -29,7 +29,6 @@ fn floatToPixel(v: f32) isize {
     return @as(isize, @intFromFloat(@round(v)));
 }
 
-// TODO: Clean up this code if possible, optimize & test
 pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, color: u32) void {
     var x0 = floatToPixel(start.x);
     var y0 = floatToPixel(start.y);
@@ -60,12 +59,39 @@ pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, color: u32) void {
     }
 }
 
-// pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) void {
-// sort the triangles by y-axis
-// var p0 = v1;
-// var p1 = v2;
-// var p2 = v3;
-// if (p0.y > p1.y) std.mem.swap(Vec3, &p0, &p1);
-// if (p1.y > p2.y) std.mem.swap(Vec3, &p1, &p2);
-// if (p0.y > p1.y) std.mem.swap(Vec3, &p0, &p1);
-// }
+pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) void {
+    var p0 = v1;
+    var p1 = v2;
+    var p2 = v3;
+    if (p0.y > p1.y) std.mem.swap(Vec3, &p0, &p1);
+    if (p1.y > p2.y) std.mem.swap(Vec3, &p1, &p2);
+    if (p0.y > p1.y) std.mem.swap(Vec3, &p0, &p1);
+
+    if (p0.y == p2.y) return; // not a triangle
+
+    fillScanlines(p0, p1, p0, p2, fb, color); // a = p0 -> p1 (short), b = p0 -> p2 (long)
+    fillScanlines(p1, p2, p0, p2, fb, color); // a = p1 -> p2 (short), b = p0 -> p2 (long)
+}
+
+// TODO: we're drawing the middle vertex twice since both are inclusive, idk if this will cause a problem
+fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color: u32) void {
+    // a is the short edge, b is the long edge
+    const a_dy = a1.y - a0.y;
+    const b_dy = b1.y - b0.y;
+    if (a_dy == 0 or b_dy == 0) return;
+
+    var y = floatToPixel(a0.y);
+    const y_end = floatToPixel(a1.y);
+
+    while (y <= y_end) : (y += 1) {
+        const fy = @as(f32, @floatFromInt(y));
+        const a = Vec3.lerp(a0, a1, (fy - a0.y) / a_dy);
+        const b = Vec3.lerp(b0, b1, (fy - b0.y) / b_dy);
+
+        var x = floatToPixel(@min(a.x, b.x));
+        const x_end = floatToPixel(@max(a.x, b.x));
+        while (x <= x_end) : (x += 1) {
+            fb.setPixel(x, y, color);
+        }
+    }
+}
