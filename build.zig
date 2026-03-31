@@ -1,4 +1,5 @@
 const std = @import("std");
+const imgui = @import("imgui_zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -10,6 +11,13 @@ pub fn build(b: *std.Build) void {
     });
     const sdl_lib = sdl_dep.artifact("SDL3");
 
+    const imgui_dep = b.dependency("imgui_zig", .{
+        .target = target,
+        .optimize = optimize,
+        .platform = imgui.Platform.sdl3,
+        .renderer = imgui.Renderer.sdlrenderer3,
+    });
+
     const exe = b.addExecutable(.{
         .name = "main",
         .root_module = b.createModule(.{
@@ -19,7 +27,14 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    const imgui_artifact = imgui_dep.artifact("imgui");
+    imgui_artifact.linkLibrary(sdl_lib);
+
     exe.linkLibrary(sdl_lib);
+    exe.linkLibrary(imgui_dep.artifact("imgui"));
+    exe.addIncludePath(imgui_dep.path("dcimgui"));
+    exe.addIncludePath(imgui_dep.path("dcimgui/backends"));
+
     b.installArtifact(exe);
 
     const run_exe = b.addRunArtifact(exe);

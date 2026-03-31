@@ -7,14 +7,13 @@ const c = @cImport({
     @cInclude("SDL3/SDL_revision.h");
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
+    @cInclude("dcimgui.h");
+    @cInclude("dcimgui_impl_sdl3.h");
+    @cInclude("dcimgui_impl_sdlrenderer3.h");
 });
 
-// We can define our math types here for ease of use
-const Vec3 = @import("math.zig").Vec3;
-
-// Program information
-const screen_width: c_int = 640;
-const screen_height: c_int = 480;
+const screen_width: c_int = 1920;
+const screen_height: c_int = 1080;
 const screen_title: [*c]const u8 = "working-title";
 
 const SdlContext = struct {
@@ -107,9 +106,21 @@ pub fn main() !void {
     defer c.SDL_Quit();
     defer sdl_context.deinit();
 
+    // Setup ImGui
+    const imgui_context = c.ImGui_CreateContext(null);
+    const io = c.ImGui_GetIO();
+    io.*.IniFilename = null; // Don't save the imgui.ini file
+    defer c.ImGui_DestroyContext(imgui_context);
+
+    _ = c.cImGui_ImplSDL3_InitForSDLRenderer(sdl_context.window, sdl_context.renderer);
+    defer c.cImGui_ImplSDL3_Shutdown();
+
+    _ = c.cImGui_ImplSDLRenderer3_Init(sdl_context.renderer);
+    defer c.cImGui_ImplSDLRenderer3_Shutdown();
+
+    // Main loop
     var is_running: bool = true;
     var event: c.SDL_Event = undefined;
-
     var pixels: ?*anyopaque = null;
     var pitch: c_int = 0;
 
@@ -117,21 +128,20 @@ pub fn main() !void {
     // so we probably want to look into what to handle explicitly
     while (is_running) {
         while (c.SDL_PollEvent(&event)) {
+            _ = c.cImGui_ImplSDL3_ProcessEvent(&event);
+
             if (event.type == c.SDL_EVENT_QUIT) {
                 is_running = false;
             }
         }
 
-        // Pixels is pointer to memory
-        // Pitch is the number of bytes per row
-        _ = c.SDL_LockTexture(sdl_context.texture, null, &pixels, &pitch);
+        // NOTE: Rasterizer begins
 
+        _ = c.SDL_LockTexture(sdl_context.texture, null, &pixels, &pitch);
         const pixel_data: [*]u32 = @ptrCast(@alignCast(pixels.?));
         const stride = @divExact(@as(usize, @intCast(pitch)), 4);
         @memset(pixel_data[0 .. stride * screen_height], 0);
 
-        // DO STUFF HERE
-        // Draw line for debugging
         const tri_color: u32 = 0x00FF00FF;
         const p1 = Point2D{ .x = 30, .y = 70 };
         const p2 = Point2D{ .x = 200, .y = 150 };
@@ -140,9 +150,28 @@ pub fn main() !void {
         const line_color: u32 = 0xFF0000FF;
         drawLine(Point2D{ .x = 10, .y = 10 }, Point2D{ .x = 200, .y = 150 }, pixel_data, stride, line_color);
 
-        // Render to screen
+        // NOTE: Rasterizer stops here!
         _ = c.SDL_UnlockTexture(sdl_context.texture);
+
+        // Clear before ImGui
+        _ = c.SDL_SetRenderDrawColorFloat(sdl_context.renderer, 0, 0, 0, 1);
+        _ = c.SDL_RenderClear(sdl_context.renderer);
+
+        // Draw the texture to screen
         _ = c.SDL_RenderTexture(sdl_context.renderer, sdl_context.texture, null, null);
+
+        // ImGui frame (renders on top)
+        c.cImGui_ImplSDLRenderer3_NewFrame();
+        c.cImGui_ImplSDL3_NewFrame();
+        c.ImGui_NewFrame();
+
+        // Debug UI
+        c.ImGui_ShowDemoWindow(null);
+
+        c.ImGui_Render();
+        c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), sdl_context.renderer);
+
         _ = c.SDL_RenderPresent(sdl_context.renderer);
+        c.SDL_Delay(16); // 60fps
     }
 }
