@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 const std = @import("std");
 const render = @import("render.zig");
+const math = @import("math.zig");
+
 const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
@@ -84,9 +86,10 @@ fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
 
     const tri_color: u32 = 0x00FF00FF;
-    const p1 = render.Point2D{ .x = 960, .y = 100 };
-    const p2 = render.Point2D{ .x = 400, .y = 900 };
-    const p3 = render.Point2D{ .x = 1520, .y = 900 };
+    const p1 = math.Vec3{ .x = 960, .y = 100, .z = 0 };
+    const p2 = math.Vec3{ .x = 400, .y = 900, .z = 0 };
+    const p3 = math.Vec3{ .x = 1520, .y = 900, .z = 0 };
+
     render.drawTriangle(p1, p2, p3, fb, tri_color);
 }
 

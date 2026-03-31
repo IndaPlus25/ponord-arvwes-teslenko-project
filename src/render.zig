@@ -1,11 +1,6 @@
 const std = @import("std");
-
-// Remove this later and just use a Vec3,
-// we can scale x, y with z component
-pub const Point2D = struct {
-    x: isize,
-    y: isize,
-};
+const math = @import("math.zig");
+const Vec3 = math.Vec3;
 
 pub const FrameBuffer = struct {
     data: [*]u32,
@@ -24,19 +19,22 @@ pub const FrameBuffer = struct {
     }
 };
 
-// Draws a hollow triangle between three points using drawLine
-pub fn drawTriangle(v1: Point2D, v2: Point2D, v3: Point2D, fb: FrameBuffer, color: u32) void {
+pub fn drawTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) void {
     drawLine(v1, v2, fb, color);
     drawLine(v1, v3, fb, color);
     drawLine(v2, v3, fb, color);
 }
 
+fn floatToPixel(v: f32) isize {
+    return @as(isize, @intFromFloat(@round(v)));
+}
+
 // TODO: Clean up this code if possible, optimize & test
-pub fn drawLine(start: Point2D, end: Point2D, fb: FrameBuffer, color: u32) void {
-    var x0 = start.x;
-    var y0 = start.y;
-    const x1 = end.x;
-    const y1 = end.y;
+pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, color: u32) void {
+    var x0 = floatToPixel(start.x);
+    var y0 = floatToPixel(start.y);
+    const x1 = floatToPixel(end.x);
+    const y1 = floatToPixel(end.y);
 
     const dx: isize = @as(isize, @intCast(@abs(x1 - x0)));
     const dy: isize = -@as(isize, @intCast(@abs(y1 - y0)));
@@ -62,10 +60,12 @@ pub fn drawLine(start: Point2D, end: Point2D, fb: FrameBuffer, color: u32) void 
     }
 }
 
-// pub fn fillTriangle(v1: Point2D, v2: Point2D, v3: Point2D) void {
-// Sort the points by y-axis (edges[0] has the smallest y and is furthest up)
-// var edges = [3]Point2D{ v1, v2, v3 };
-// if (edges[0].y > edges[1].y) std.mem.swap(Point2D, &edges[0], &edges[1]);
-// if (edges[1].y > edges[2].y) std.mem.swap(Point2D, &edges[1], &edges[2]);
-// if (edges[0].y > edges[1].y) std.mem.swap(Point2D, &edges[0], &edges[1]);
+// pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) void {
+// sort the triangles by y-axis
+// var p0 = v1;
+// var p1 = v2;
+// var p2 = v3;
+// if (p0.y > p1.y) std.mem.swap(Vec3, &p0, &p1);
+// if (p1.y > p2.y) std.mem.swap(Vec3, &p1, &p2);
+// if (p0.y > p1.y) std.mem.swap(Vec3, &p0, &p1);
 // }

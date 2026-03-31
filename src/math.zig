@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Vec3 = struct {
+pub const Vec3 = struct {
     x: f32,
     y: f32,
     z: f32,
@@ -13,7 +13,7 @@ const Vec3 = struct {
         return .{ .x = self.x - other.x, .y = self.y - other.y, .z = self.z - other.z };
     }
 
-    pub fn mul(scalar: f32, self: Vec3) Vec3 {
+    pub fn mul(self: Vec3, scalar: f32) Vec3 {
         return .{ .x = self.x * scalar, .y = self.y * scalar, .z = self.z * scalar };
     }
 
