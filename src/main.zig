@@ -84,31 +84,53 @@ fn processEvents(is_running: *bool) void {
 
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
-
     // some tests
-    render.fillTriangle(
-        .{ .x = 960, .y = 100, .z = 0 },
-        .{ .x = 400, .y = 900, .z = 0 },
-        .{ .x = 1520, .y = 900, .z = 0 },
-        fb,
-        0x00FF00FF,
-    );
 
-    render.fillTriangle(
-        .{ .x = 200, .y = 200, .z = 0 },
-        .{ .x = 100, .y = 400, .z = 0 },
-        .{ .x = 350, .y = 350, .z = 0 },
-        fb,
-        0xFF0000FF,
-    );
+    // Simulated camera position
+    const camera_pos = math.Vec3{ .x = 0, .y = 0, .z = -10 };
 
-    render.fillTriangle(
-        .{ .x = 1400, .y = 200, .z = 0 },
-        .{ .x = 1700, .y = 200, .z = 0 },
-        .{ .x = 1550, .y = 500, .z = 0 },
-        fb,
-        0x0000FFFF,
-    );
+    // triangle 1 (green)
+    const v1 = math.Vec3{ .x = 960, .y = 100, .z = 0 };
+    const v2 = math.Vec3{ .x = 400, .y = 900, .z = 0 };
+    const v3 = math.Vec3{ .x = 1520, .y = 900, .z = 0 };
+
+    if (!render.cullTriangle(v1, v2, v3, camera_pos))
+        render.fillTriangle(
+            v1,
+            v2,
+            v3,
+            fb,
+            0x00FF00FF,
+        );
+
+    // triangle 2 (red)
+    const v4 = math.Vec3{ .x = 200, .y = 200, .z = 0 };
+    const v5 = math.Vec3{ .x = 100, .y = 400, .z = 0 };
+    const v6 = math.Vec3{ .x = 350, .y = 350, .z = 0 };
+
+    if (!render.cullTriangle(v4, v5, v6, camera_pos))
+        render.fillTriangle(
+            v4,
+            v5,
+            v6,
+            fb,
+            0xFF0000FF,
+        );
+
+    // triangle 3 (blue)
+    const v7 = math.Vec3{ .x = 1400, .y = 200, .z = 0 };
+    const v8 = math.Vec3{ .x = 1700, .y = 200, .z = 0 };
+    const v9 = math.Vec3{ .x = 1550, .y = 500, .z = 0 };
+
+    //triangle 3 is declared clock-wise if camera_pos.z <0 (will be culled since camera_pos.z = -10)
+    if (!render.cullTriangle(v7, v8, v9, camera_pos))
+        render.fillTriangle(
+            v7,
+            v8,
+            v9,
+            fb,
+            0x0000FFFF,
+        );
 }
 
 fn renderImGui() void {
