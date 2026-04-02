@@ -144,6 +144,7 @@ fn renderImGui(texture: *c.SDL_Texture) void {
     _ = c.ImGui_DockSpaceOverViewport();
 
     // viewport window
+    // TODO: is there a better way to do the aspect ratio letterboxing without having to calculate every frame?
     if (c.ImGui_Begin("Viewport", null, 0)) {
         const avail = c.ImGui_GetContentRegionAvail();
         const tex_aspect = @as(f32, @floatFromInt(screen_width)) / @as(f32, @floatFromInt(screen_height));
