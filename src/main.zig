@@ -47,6 +47,8 @@ fn initSdl() !SdlContext {
         return error.SdlWindowCreationFailed;
     }
 
+    _ = c.SDL_SetRenderVSync(renderer.?, 1); // enable vsync
+
     texture = c.SDL_CreateTexture(renderer, c.SDL_PIXELFORMAT_RGBA8888, c.SDL_TEXTUREACCESS_STREAMING, screen_width, screen_height);
 
     if (texture == null) {
@@ -60,7 +62,8 @@ fn initSdl() !SdlContext {
 fn initImGui(window: *c.SDL_Window, renderer: *c.SDL_Renderer) *c.ImGuiContext {
     const context = c.ImGui_CreateContext(null).?;
     const io = c.ImGui_GetIO();
-    io.*.IniFilename = null; // don't save the imgui.ini file
+    io.*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
+    io.*.IniFilename = "config/imgui.ini";
     _ = c.cImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     _ = c.cImGui_ImplSDLRenderer3_Init(renderer);
     return context;
@@ -133,13 +136,47 @@ fn renderScene(fb: render.FrameBuffer) void {
         );
 }
 
-fn renderImGui() void {
+fn renderImGui(texture: *c.SDL_Texture) void {
     c.cImGui_ImplSDLRenderer3_NewFrame();
     c.cImGui_ImplSDL3_NewFrame();
     c.ImGui_NewFrame();
 
-    // TODO: add own ui
-    c.ImGui_ShowDemoWindow(null);
+    _ = c.ImGui_DockSpaceOverViewport();
+
+    // viewport window
+    if (c.ImGui_Begin("Viewport", null, 0)) {
+        const avail = c.ImGui_GetContentRegionAvail();
+        const tex_aspect = @as(f32, @floatFromInt(screen_width)) / @as(f32, @floatFromInt(screen_height));
+        const avail_aspect = avail.x / avail.y;
+
+        var img_size: c.ImVec2 = undefined;
+        if (avail_aspect > tex_aspect) {
+            img_size.y = avail.y;
+            img_size.x = avail.y * tex_aspect;
+        } else {
+            img_size.x = avail.x;
+            img_size.y = avail.x / tex_aspect;
+        }
+
+        const pad_x = (avail.x - img_size.x) * 0.5;
+        const pad_y = (avail.y - img_size.y) * 0.5;
+        if (pad_x > 0 or pad_y > 0) {
+            const pos = c.ImGui_GetCursorPos();
+            c.ImGui_SetCursorPos(.{ .x = pos.x + pad_x, .y = pos.y + pad_y });
+        }
+
+        c.ImGui_Image(c.struct_ImTextureRef_t{
+            ._TexData = null,
+            ._TexID = @intFromPtr(texture),
+        }, img_size);
+    }
+    c.ImGui_End();
+
+    // demo window thing
+    if (c.ImGui_Begin("hello", null, 0)) {
+        c.ImGui_Text("this is a window");
+    }
+    c.ImGui_End();
 
     c.ImGui_Render();
 }
@@ -174,12 +211,10 @@ pub fn main() !void {
         // present texture & draw imgui
         _ = c.SDL_SetRenderDrawColorFloat(sdl_context.renderer, 0, 0, 0, 1);
         _ = c.SDL_RenderClear(sdl_context.renderer);
-        _ = c.SDL_RenderTexture(sdl_context.renderer, sdl_context.texture, null, null);
 
-        renderImGui();
+        renderImGui(sdl_context.texture);
         c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), sdl_context.renderer);
 
         _ = c.SDL_RenderPresent(sdl_context.renderer);
-        c.SDL_Delay(16); // 60fps
     }
 }
