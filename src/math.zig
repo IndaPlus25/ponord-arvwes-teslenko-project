@@ -47,8 +47,36 @@ pub const Vec4 = struct {
     y: f32,
     z: f32,
     w: f32, // 0 or 1 depending on direction or point
+
+    // Point has w = 1
+    pub fn point(x: f32, y: f32, z: f32) Vec4 {
+        return .{ .x = x, .y = y, .z = z, .w = 1 };
+    }
+
+    // Direction has w = 0
+    pub fn direction(x: f32, y: f32, z: f32) Vec4 {
+        return .{ .x = x, .y = y, .z = z, .w = 0 };
+    }
 };
 
 pub const Mat4 = struct {
     rows: [4]Vec4,
+
+    pub fn mulVec4(self: Mat4, v: Vec4) Vec4 {
+        return .{
+            .x = self.rows[0].x * v.x + self.rows[0].y * v.y + self.rows[0].z * v.z + self.rows[0].w * v.w,
+            .y = self.rows[1].x * v.x + self.rows[1].y * v.y + self.rows[1].z * v.z + self.rows[1].w * v.w,
+            .z = self.rows[2].x * v.x + self.rows[2].y * v.y + self.rows[2].z * v.z + self.rows[2].w * v.w,
+            .w = self.rows[3].x * v.x + self.rows[3].y * v.y + self.rows[3].z * v.z + self.rows[3].w * v.w,
+        };
+    }
+
+    pub fn identity() Mat4 {
+        return .{ .rows = .{
+            .{ .x = 1, .y = 0, .z = 0, .w = 0 },
+            .{ .x = 0, .y = 1, .z = 0, .w = 0 },
+            .{ .x = 0, .y = 0, .z = 1, .w = 0 },
+            .{ .x = 0, .y = 0, .z = 0, .w = 1 },
+        } };
+    }
 };

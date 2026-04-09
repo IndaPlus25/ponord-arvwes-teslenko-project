@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 const std = @import("std");
 const render = @import("render.zig");
-const camera = @import("render.zig").Camera;
 const math = @import("math.zig");
 
 const c = @cImport({
@@ -88,8 +87,7 @@ fn processEvents(is_running: *bool) void {
 
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
-    // camera position
-    var world_camera = camera.new();
+    var world_camera = render.Camera{}; // default camera
 }
 
 fn renderImGui(texture: *c.SDL_Texture) void {

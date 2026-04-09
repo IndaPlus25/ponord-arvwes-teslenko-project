@@ -4,21 +4,12 @@ const Vec3 = math.Vec3;
 const Vec4 = math.Vec4;
 
 pub const Camera = struct {
-    look: Vec3,
-    position: Vec3,
-    fov: f32, // radian?
-    up: Vec3,
-    // z_far (z-buffer?)
-    // z_near:
-
-    pub fn new() Camera {
-        Camera{
-            .look = .{ .x = 0, .y = 0, .z = 2 },
-            .position = .{ .x = 0, .y = 0, .z = 0 },
-            .fov = 80.0, // ???
-            .up = .{ .x = 0, .y = 1, .z = 0 },
-        };
-    }
+    position: Vec3 = .{ .x = 0, .y = 0, .z = 0 }, // world pos
+    target: Vec3 = .{ .x = 0, .y = 0, .z = 2 }, // looking at
+    up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
+    fov: f32 = 80, // degrees
+    near: f32 = 0.1, // distance to near plane
+    far: f32 = 1000.0, // distance to far plane
 };
 
 pub const FrameBuffer = struct {
