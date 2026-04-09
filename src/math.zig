@@ -41,3 +41,10 @@ pub const Vec3 = struct {
         return v.sub(u).mul(t).add(u);
     }
 };
+
+pub const Vec4 = struct {
+    x: f32,
+    y: f32,
+    z: f32,
+    w: f32,
+};
