@@ -87,10 +87,15 @@ fn processEvents(is_running: *bool) void {
 
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
-    const world_camera = render.Camera{}; // default camera
+    const world_camera = render.Camera{
+        .position = .{ .x = 5, .y = 5, .z = 5 },
+        .target = .{ .x = 3, .y = 1, .z = -4 }, // point at the cube
+    };
     const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
 
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
+    const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
+    const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
 
     const cx: f32 = 3;
     const cy: f32 = 1;
@@ -118,9 +123,9 @@ fn renderScene(fb: render.FrameBuffer) void {
     };
 
     for (tris) |tri_v| {
-        const c0 = proj_matrix.mulVec4(tri_v[0]);
-        const c1 = proj_matrix.mulVec4(tri_v[1]);
-        const c2 = proj_matrix.mulVec4(tri_v[2]);
+        const c0 = vp.mulVec4(tri_v[0]);
+        const c1 = vp.mulVec4(tri_v[1]);
+        const c2 = vp.mulVec4(tri_v[2]);
 
         if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
 
@@ -128,12 +133,9 @@ fn renderScene(fb: render.FrameBuffer) void {
         const v2 = c1.toPixel(fb.width, fb.height);
         const v3 = c2.toPixel(fb.width, fb.height);
 
-        // TODO: Change culltriangle to use screen space not world space
-        // TODO: Change of basis to camera coordinates so we can use different camera positions
-        if (!render.cullTriangle(v1, v2, v3, world_camera.position)) {
-            render.fillTriangle(v1, v2, v3, fb, 0xFFFFFFFF);
-            render.drawTriangle(v1, v2, v3, fb, 0xFF0000FF);
-        }
+        if (render.facingAway(v1, v2, v3)) continue;
+        render.fillTriangle(v1, v2, v3, fb, 0xFFFFFFFF);
+        render.drawTriangle(v1, v2, v3, fb, 0xFF0000FF);
     }
 }
 

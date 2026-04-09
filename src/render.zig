@@ -108,14 +108,9 @@ fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color:
     }
 }
 
-pub fn cullTriangle(v1: Vec3, v2: Vec3, v3: Vec3, camera_pos: Vec3) bool {
-    const l1 = v2.sub(v1);
-    const l2 = v3.sub(v1);
-    // normal n, following CCW winding order
-    const n = l1.cross(l2);
-    //if triangle face is rotated 90 degrees or less from the camera. => normal pointing away from camera
-    if ((v1.sub(camera_pos).dot(n)) >= 0) {
-        return true;
-    }
-    return false;
+// Is the triangle facing away from us?
+pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
+    const edge1 = v2.sub(v1);
+    const edge2 = v3.sub(v1);
+    return edge1.cross(edge2).z >= 0;
 }

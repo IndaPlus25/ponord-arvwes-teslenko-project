@@ -108,4 +108,33 @@ pub const Mat4 = struct {
             .{ .x = 0, .y = 0, .z = -1, .w = 0 },
         } };
     }
+
+    // Returns a view matrix so we can do change of basis to the camera coordinates
+    // https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/lookat-function/framing-lookat-function.html
+    pub fn viewMatrix(position: Vec3, target: Vec3, world_up: Vec3) Mat4 {
+        const forward = target.sub(position).norm(); // points toward target
+        const right = forward.cross(world_up).norm();
+        const up = right.cross(forward);
+
+        return .{ .rows = .{
+            .{ .x = right.x, .y = right.y, .z = right.z, .w = -right.dot(position) },
+            .{ .x = up.x, .y = up.y, .z = up.z, .w = -up.dot(position) },
+            .{ .x = -forward.x, .y = -forward.y, .z = -forward.z, .w = forward.dot(position) },
+            .{ .x = 0, .y = 0, .z = 0, .w = 1 },
+        } };
+    }
+
+    pub fn mul(self: Mat4, other: Mat4) Mat4 {
+        var res: Mat4 = undefined;
+        for (0..4) |i| {
+            const row = self.rows[i];
+            res.rows[i] = .{
+                .x = row.x * other.rows[0].x + row.y * other.rows[1].x + row.z * other.rows[2].x + row.w * other.rows[3].x,
+                .y = row.x * other.rows[0].y + row.y * other.rows[1].y + row.z * other.rows[2].y + row.w * other.rows[3].y,
+                .z = row.x * other.rows[0].z + row.y * other.rows[1].z + row.z * other.rows[2].z + row.w * other.rows[3].z,
+                .w = row.x * other.rows[0].w + row.y * other.rows[1].w + row.z * other.rows[2].w + row.w * other.rows[3].w,
+            };
+        }
+        return res;
+    }
 };
