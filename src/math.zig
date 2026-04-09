@@ -57,6 +57,22 @@ pub const Vec4 = struct {
     pub fn direction(x: f32, y: f32, z: f32) Vec4 {
         return .{ .x = x, .y = y, .z = z, .w = 0 };
     }
+
+    pub fn toVec3(self: Vec4) Vec3 {
+        return .{ .x = self.x, .y = self.y, .z = self.z };
+    }
+
+    pub fn toPixel(self: Vec4, fb_w: c_int, fb_h: c_int) Vec3 {
+        // After projection we have our vectors in clip space
+        // We normalize the vectors by multiplying with 1/self.w
+        const inverse = 1.0 / self.w;
+
+        return .{
+            .x = (self.x * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_w)),
+            .y = (self.y * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_h)),
+            .z = (self.z * inverse + 1) * 0.5,
+        };
+    }
 };
 
 pub const Mat4 = struct {

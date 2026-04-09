@@ -112,7 +112,7 @@ pub fn cullTriangle(v1: Vec3, v2: Vec3, v3: Vec3, camera_pos: Vec3) bool {
     const l1 = v2.sub(v1);
     const l2 = v3.sub(v1);
     // normal n, following CCW winding order
-    const n = l1.cross(l2);
+    const n = l2.cross(l1);
     //if triangle face is rotated 90 degrees or less from the camera. => normal pointing away from camera
     if ((v1.sub(camera_pos).dot(n)) >= 0) {
         return true;

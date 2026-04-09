@@ -87,33 +87,53 @@ fn processEvents(is_running: *bool) void {
 
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
-    var world_camera = render.Camera{}; // default camera
-    var aspect = @as(f32, fb.width) / @as(f32, fb.height);
+    const world_camera = render.Camera{}; // default camera
+    const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
 
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
 
+    const cx: f32 = 2;
+    const cy: f32 = -2;
+    const cz: f32 = -4;
+
     const tris = [_][3]math.Vec4{
-        // back face (z = -6)
-        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -6, .w = 1 }, .{ .x = 1, .y = -1, .z = -6, .w = 1 } },
-        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = -1, .y = 1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -6, .w = 1 } },
-        // front face (z = -4)
-        .{ .{ .x = -1, .y = -1, .z = -4, .w = 1 }, .{ .x = 1, .y = -1, .z = -4, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 } },
-        .{ .{ .x = -1, .y = -1, .z = -4, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 }, .{ .x = -1, .y = 1, .z = -4, .w = 1 } },
-        // left face (x = -1)
-        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = -1, .y = -1, .z = -4, .w = 1 }, .{ .x = -1, .y = 1, .z = -4, .w = 1 } },
-        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = -1, .y = 1, .z = -4, .w = 1 }, .{ .x = -1, .y = 1, .z = -6, .w = 1 } },
-        // right face (x = 1)
-        .{ .{ .x = 1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 } },
-        .{ .{ .x = 1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 }, .{ .x = 1, .y = -1, .z = -4, .w = 1 } },
-        // bottom face (y = -1)
-        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = -1, .z = -4, .w = 1 } },
-        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = -1, .z = -4, .w = 1 }, .{ .x = -1, .y = -1, .z = -4, .w = 1 } },
-        // top face (y = 1)
-        .{ .{ .x = -1, .y = 1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 }, .{ .x = 1, .y = 1, .z = -6, .w = 1 } },
-        .{ .{ .x = -1, .y = 1, .z = -6, .w = 1 }, .{ .x = -1, .y = 1, .z = -4, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 } },
+        // back face
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
+        // front face
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+        // left face
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
+        // right face
+        .{ .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+        .{ .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
+        // bottom face
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
+        // top face
+        .{ .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
     };
 
-    for (tris) |tri_v| {}
+    for (tris) |tri_v| {
+        // evil hack
+        const c0 = proj_matrix.mulVec4(tri_v[0]);
+        const c1 = proj_matrix.mulVec4(tri_v[1]);
+        const c2 = proj_matrix.mulVec4(tri_v[2]);
+
+        if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
+
+        const v1 = c0.toPixel(fb.width, fb.height);
+        const v2 = c1.toPixel(fb.width, fb.height);
+        const v3 = c2.toPixel(fb.width, fb.height);
+
+        if (!render.cullTriangle(v1, v2, v3, world_camera.position)) {
+            render.fillTriangle(v1, v2, v3, fb, 0xFFFFFFFF);
+            render.drawTriangle(v1, v2, v3, fb, 0xFF0000FF);
+        }
+    }
 }
 
 fn renderImGui(texture: *c.SDL_Texture) void {
