@@ -79,4 +79,16 @@ pub const Mat4 = struct {
             .{ .x = 0, .y = 0, .z = 0, .w = 1 },
         } };
     }
+
+    // Cursed transform matrix taken from
+    // https://www.scratchapixel.com/lessons/3d-basic-rendering/perspective-and-orthographic-projection-matrix/building-basic-perspective-projection-matrix.html
+    pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
+        const s = 1.0 / @tan(fov / 2.0 * std.math.pi / 180.0);
+        return .{ .rows = .{
+            .{ .x = s / aspect, .y = 0, .z = 0, .w = 0 },
+            .{ .x = 0, .y = s, .z = 0, .w = 0 },
+            .{ .x = 0, .y = 0, .z = -far / (far - near), .w = -(far * near) / (far - near) },
+            .{ .x = 0, .y = 0, .z = -1, .w = 0 },
+        } };
+    }
 };

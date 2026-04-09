@@ -88,6 +88,32 @@ fn processEvents(is_running: *bool) void {
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
     var world_camera = render.Camera{}; // default camera
+    var aspect = @as(f32, fb.width) / @as(f32, fb.height);
+
+    const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
+
+    const tris = [_][3]math.Vec4{
+        // back face (z = -6)
+        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -6, .w = 1 }, .{ .x = 1, .y = -1, .z = -6, .w = 1 } },
+        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = -1, .y = 1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -6, .w = 1 } },
+        // front face (z = -4)
+        .{ .{ .x = -1, .y = -1, .z = -4, .w = 1 }, .{ .x = 1, .y = -1, .z = -4, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 } },
+        .{ .{ .x = -1, .y = -1, .z = -4, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 }, .{ .x = -1, .y = 1, .z = -4, .w = 1 } },
+        // left face (x = -1)
+        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = -1, .y = -1, .z = -4, .w = 1 }, .{ .x = -1, .y = 1, .z = -4, .w = 1 } },
+        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = -1, .y = 1, .z = -4, .w = 1 }, .{ .x = -1, .y = 1, .z = -6, .w = 1 } },
+        // right face (x = 1)
+        .{ .{ .x = 1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 } },
+        .{ .{ .x = 1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 }, .{ .x = 1, .y = -1, .z = -4, .w = 1 } },
+        // bottom face (y = -1)
+        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = -1, .z = -4, .w = 1 } },
+        .{ .{ .x = -1, .y = -1, .z = -6, .w = 1 }, .{ .x = 1, .y = -1, .z = -4, .w = 1 }, .{ .x = -1, .y = -1, .z = -4, .w = 1 } },
+        // top face (y = 1)
+        .{ .{ .x = -1, .y = 1, .z = -6, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 }, .{ .x = 1, .y = 1, .z = -6, .w = 1 } },
+        .{ .{ .x = -1, .y = 1, .z = -6, .w = 1 }, .{ .x = -1, .y = 1, .z = -4, .w = 1 }, .{ .x = 1, .y = 1, .z = -4, .w = 1 } },
+    };
+
+    for (tris) |tri_v| {}
 }
 
 fn renderImGui(texture: *c.SDL_Texture) void {
