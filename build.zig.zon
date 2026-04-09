@@ -7,8 +7,8 @@
             .hash = "sdl-0.4.1+3.4.2-SDL--umApAGq9hhwKcquz9eEQtR1x7S3pnQUe2mNpjVj",
         },
         .imgui_zig = .{
-            .url = "git+https://github.com/TheNemoNemesis/imgui.zig.git#80333a99e47587597b535a5a21d806d3b58e9448",
-            .hash = "imgui_zig-0.0.1-AYeHWdnD4wM41b7ZqBDysLyOGIB74QMXGKJm8v3UrOxb",
+            .url = "git+https://github.com/TheNemoNemesis/imgui.zig.git?ref=docking#158d1a32e967ce90bdb19d3537069b15a34fb7d9",
+            .hash = "imgui_zig-0.0.1-9lMmmXBpOASYjMDJSoBeigNiYZmntnEl4TXyR9ckT7Ql",
         },
     },
     .minimum_zig_version = "0.15.2",
