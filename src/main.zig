@@ -92,8 +92,8 @@ fn renderScene(fb: render.FrameBuffer) void {
 
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
 
-    const cx: f32 = 2;
-    const cy: f32 = -2;
+    const cx: f32 = 3;
+    const cy: f32 = 1;
     const cz: f32 = -4;
 
     const tris = [_][3]math.Vec4{
@@ -118,7 +118,6 @@ fn renderScene(fb: render.FrameBuffer) void {
     };
 
     for (tris) |tri_v| {
-        // evil hack
         const c0 = proj_matrix.mulVec4(tri_v[0]);
         const c1 = proj_matrix.mulVec4(tri_v[1]);
         const c2 = proj_matrix.mulVec4(tri_v[2]);

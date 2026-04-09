@@ -63,14 +63,15 @@ pub const Vec4 = struct {
     }
 
     pub fn toPixel(self: Vec4, fb_w: c_int, fb_h: c_int) Vec3 {
-        // After projection we have our vectors in clip space
-        // We normalize the vectors by multiplying with 1/self.w
         const inverse = 1.0 / self.w;
 
+        // x, y is in [-1, 1] & z in [0, 1] after projection
+        // switch x,y to pixel coordinates by adding 1 [-1 + 1, 1 + 1] = [0, 2]
+        // then divide by 2 to get the range [0, 1]
         return .{
             .x = (self.x * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_w)),
-            .y = (self.y * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_h)),
-            .z = (self.z * inverse + 1) * 0.5,
+            .y = (-self.y * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_h)), // flipped sign because negative is up
+            .z = self.z * inverse, // z is already [0, 1] after projection so no need to change
         };
     }
 };

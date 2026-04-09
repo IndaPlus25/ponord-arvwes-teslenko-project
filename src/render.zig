@@ -5,7 +5,7 @@ const Vec4 = math.Vec4;
 
 pub const Camera = struct {
     position: Vec3 = .{ .x = 0, .y = 0, .z = 0 }, // world pos
-    target: Vec3 = .{ .x = 0, .y = 0, .z = 2 }, // looking at
+    target: Vec3 = .{ .x = 0, .y = 0, .z = -1 }, // looking at
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
     fov: f32 = 80, // degrees
     near: f32 = 0.1, // distance to near plane
@@ -112,7 +112,7 @@ pub fn cullTriangle(v1: Vec3, v2: Vec3, v3: Vec3, camera_pos: Vec3) bool {
     const l1 = v2.sub(v1);
     const l2 = v3.sub(v1);
     // normal n, following CCW winding order
-    const n = l2.cross(l1);
+    const n = l1.cross(l2);
     //if triangle face is rotated 90 degrees or less from the camera. => normal pointing away from camera
     if ((v1.sub(camera_pos).dot(n)) >= 0) {
         return true;
