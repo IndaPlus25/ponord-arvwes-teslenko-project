@@ -128,6 +128,8 @@ fn renderScene(fb: render.FrameBuffer) void {
         const v2 = c1.toPixel(fb.width, fb.height);
         const v3 = c2.toPixel(fb.width, fb.height);
 
+        // TODO: Change culltriangle to use screen space not world space
+        // TODO: Change of basis to camera coordinates so we can use different camera positions
         if (!render.cullTriangle(v1, v2, v3, world_camera.position)) {
             render.fillTriangle(v1, v2, v3, fb, 0xFFFFFFFF);
             render.drawTriangle(v1, v2, v3, fb, 0xFF0000FF);
