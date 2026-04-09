@@ -46,5 +46,9 @@ pub const Vec4 = struct {
     x: f32,
     y: f32,
     z: f32,
-    w: f32,
+    w: f32, // 0 or 1 depending on direction or point
+};
+
+pub const Mat4 = struct {
+    rows: [4]Vec4,
 };

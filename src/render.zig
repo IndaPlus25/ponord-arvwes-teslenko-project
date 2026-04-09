@@ -1,6 +1,25 @@
 const std = @import("std");
 const math = @import("math.zig");
 const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+
+pub const Camera = struct {
+    look: Vec3,
+    position: Vec3,
+    fov: f32, // radian?
+    up: Vec3,
+    // z_far (z-buffer?)
+    // z_near:
+
+    pub fn new() Camera {
+        Camera{
+            .look = .{ .x = 0, .y = 0, .z = 2 },
+            .position = .{ .x = 0, .y = 0, .z = 0 },
+            .fov = 80.0, // ???
+            .up = .{ .x = 0, .y = 1, .z = 0 },
+        };
+    }
+};
 
 pub const FrameBuffer = struct {
     data: [*]u32,
