@@ -113,7 +113,7 @@ pub const Mat4 = struct {
     // https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/lookat-function/framing-lookat-function.html
     pub fn viewMatrix(position: Vec3, target: Vec3, world_up: Vec3) Mat4 {
         const forward = target.sub(position).norm(); // points toward target
-        const right = forward.cross(world_up).norm();
+        const right = forward.cross(world_up).norm(); // right hand rule
         const up = right.cross(forward);
 
         return .{ .rows = .{

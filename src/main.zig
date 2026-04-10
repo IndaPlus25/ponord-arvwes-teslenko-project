@@ -88,8 +88,8 @@ fn processEvents(is_running: *bool) void {
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
     const world_camera = render.Camera{
-        .position = .{ .x = 5, .y = 5, .z = 5 },
-        .target = .{ .x = 3, .y = 1, .z = -4 }, // point at the cube
+        .position = .{ .x = 4.5, .y = 4, .z = 6.5 },
+        .target = .{ .x = 1, .y = 1, .z = 3 }, // point at the cube
     };
     const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
 
@@ -97,9 +97,9 @@ fn renderScene(fb: render.FrameBuffer) void {
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
     const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
 
-    const cx: f32 = 3;
+    const cx: f32 = 1;
     const cy: f32 = 1;
-    const cz: f32 = -4;
+    const cz: f32 = 3;
 
     const tris = [_][3]math.Vec4{
         // back face
@@ -135,7 +135,7 @@ fn renderScene(fb: render.FrameBuffer) void {
 
         if (render.facingAway(v1, v2, v3)) continue;
         render.fillTriangle(v1, v2, v3, fb, 0xFFFFFFFF);
-        render.drawTriangle(v1, v2, v3, fb, 0xFF0000FF);
+        render.drawTriangle(v1, v2, v3, fb, 0xFFFFFF00);
     }
 }
 
