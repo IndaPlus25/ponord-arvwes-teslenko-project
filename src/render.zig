@@ -1,6 +1,16 @@
 const std = @import("std");
 const math = @import("math.zig");
 const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+
+pub const Camera = struct {
+    position: Vec3 = .{ .x = 0, .y = 0, .z = 0 }, // world pos
+    target: Vec3 = .{ .x = 0, .y = 0, .z = -1 }, // looking at
+    up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
+    fov: f32 = 80, // degrees
+    near: f32 = 0.1, // distance to near plane
+    far: f32 = 1000.0, // distance to far plane
+};
 
 pub const FrameBuffer = struct {
     data: [*]u32,
@@ -75,7 +85,6 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) v
 
 // TODO: we're drawing the middle vertex twice since both are inclusive, idk if this will cause a problem
 // TODO: handle off screen triangles so we don't waste resources
-// TODO: we probably want to clamp the t value for lerp so it doesnt go negative or bigger than 1
 fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color: u32) void {
     // a is the short edge, b is the long edge
     const a_dy = a1.y - a0.y;
@@ -98,14 +107,9 @@ fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color:
     }
 }
 
-pub fn cullTriangle(v1: Vec3, v2: Vec3, v3: Vec3, camera_pos: Vec3) bool {
-    const l1 = v2.sub(v1);
-    const l2 = v3.sub(v1);
-    // normal n, following CCW winding order
-    const n = l1.cross(l2);
-    //if triangle face is rotated 90 degrees or less from the camera. => normal pointing away from camera
-    if ((v1.sub(camera_pos).dot(n)) >= 0) {
-        return true;
-    }
-    return false;
+// Is the triangle facing away from us?
+pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
+    const edge1 = v2.sub(v1);
+    const edge2 = v3.sub(v1);
+    return edge1.cross(edge2).z >= 0;
 }

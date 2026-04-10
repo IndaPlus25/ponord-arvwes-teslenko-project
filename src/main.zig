@@ -87,53 +87,56 @@ fn processEvents(is_running: *bool) void {
 
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
-    // some tests
+    const world_camera = render.Camera{
+        .position = .{ .x = 3, .y = 2, .z = 6 },
+        .target = .{ .x = 1, .y = 1, .z = 3 }, // point at the cube
+    };
+    const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
 
-    // Simulated camera position
-    const camera_pos = math.Vec3{ .x = 0, .y = 0, .z = -10 };
+    const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
+    const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
+    const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
 
-    // triangle 1 (green)
-    const v1 = math.Vec3{ .x = 960, .y = 100, .z = 0 };
-    const v2 = math.Vec3{ .x = 400, .y = 900, .z = 0 };
-    const v3 = math.Vec3{ .x = 1520, .y = 900, .z = 0 };
+    const cx: f32 = 1;
+    const cy: f32 = 1;
+    const cz: f32 = 3;
 
-    if (!render.cullTriangle(v1, v2, v3, camera_pos))
-        render.fillTriangle(
-            v1,
-            v2,
-            v3,
-            fb,
-            0x00FF00FF,
-        );
+    const tris = [_][3]math.Vec4{
+        // back face
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
+        // front face
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+        // left face
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
+        // right face
+        .{ .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+        .{ .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
+        // bottom face
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
+        // top face
+        .{ .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
+        .{ .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
+    };
 
-    // triangle 2 (red)
-    const v4 = math.Vec3{ .x = 200, .y = 200, .z = 0 };
-    const v5 = math.Vec3{ .x = 100, .y = 400, .z = 0 };
-    const v6 = math.Vec3{ .x = 350, .y = 350, .z = 0 };
+    for (tris) |tri_v| {
+        const c0 = vp.mulVec4(tri_v[0]);
+        const c1 = vp.mulVec4(tri_v[1]);
+        const c2 = vp.mulVec4(tri_v[2]);
 
-    if (!render.cullTriangle(v4, v5, v6, camera_pos))
-        render.fillTriangle(
-            v4,
-            v5,
-            v6,
-            fb,
-            0xFF0000FF,
-        );
+        if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
 
-    // triangle 3 (blue)
-    const v7 = math.Vec3{ .x = 1400, .y = 200, .z = 0 };
-    const v8 = math.Vec3{ .x = 1700, .y = 200, .z = 0 };
-    const v9 = math.Vec3{ .x = 1550, .y = 500, .z = 0 };
+        const v1 = c0.toPixel(fb.width, fb.height);
+        const v2 = c1.toPixel(fb.width, fb.height);
+        const v3 = c2.toPixel(fb.width, fb.height);
 
-    //triangle 3 is declared clock-wise if camera_pos.z <0 (will be culled since camera_pos.z = -10)
-    if (!render.cullTriangle(v7, v8, v9, camera_pos))
-        render.fillTriangle(
-            v7,
-            v8,
-            v9,
-            fb,
-            0x0000FFFF,
-        );
+        if (render.facingAway(v1, v2, v3)) continue;
+        render.fillTriangle(v1, v2, v3, fb, 0xFFFFFFFF);
+        render.drawTriangle(v1, v2, v3, fb, 0xFFFFFF00);
+    }
 }
 
 fn renderImGui(texture: *c.SDL_Texture) void {
