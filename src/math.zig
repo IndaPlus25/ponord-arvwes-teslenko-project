@@ -38,7 +38,8 @@ pub const Vec3 = struct {
     }
 
     pub fn lerp(u: Vec3, v: Vec3, t: f32) Vec3 {
-        return v.sub(u).mul(t).add(u);
+        const lerp_t = std.math.clamp(t, 0, 1);
+        return v.sub(u).mul(lerp_t).add(u);
     }
 };
 

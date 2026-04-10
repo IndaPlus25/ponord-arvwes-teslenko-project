@@ -85,7 +85,6 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) v
 
 // TODO: we're drawing the middle vertex twice since both are inclusive, idk if this will cause a problem
 // TODO: handle off screen triangles so we don't waste resources
-// TODO: we probably want to clamp the t value for lerp so it doesnt go negative or bigger than 1
 fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color: u32) void {
     // a is the short edge, b is the long edge
     const a_dy = a1.y - a0.y;

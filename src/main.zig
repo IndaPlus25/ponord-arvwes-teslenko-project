@@ -88,7 +88,7 @@ fn processEvents(is_running: *bool) void {
 fn renderScene(fb: render.FrameBuffer) void {
     fb.clear();
     const world_camera = render.Camera{
-        .position = .{ .x = 4.5, .y = 4, .z = 6.5 },
+        .position = .{ .x = 3, .y = 2, .z = 6 },
         .target = .{ .x = 1, .y = 1, .z = 3 }, // point at the cube
     };
     const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
