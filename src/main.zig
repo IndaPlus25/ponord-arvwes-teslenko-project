@@ -3,9 +3,9 @@
 const std = @import("std");
 const render = @import("render.zig");
 const math = @import("math.zig");
-const loader = @import("loader.zig");
+const objects = @import("objects.zig");
 
-const Model = loader.Model;
+const Model = objects.Model;
 
 const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -177,7 +177,7 @@ pub fn main() !void {
 
     // Load object
     const allocator = std.heap.page_allocator;
-    var object = try loader.loadObjFile("models/cow.obj", &allocator);
+    var object = try objects.loadModel("models/cow.obj", &allocator);
     defer object.deinit();
 
     // TODO: better error handling

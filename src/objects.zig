@@ -11,13 +11,12 @@ pub const Model = struct {
     }
 };
 
-// Use to load a 3D model from file
-pub fn loadObjFile(file_path: []const u8, allocator: *const std.mem.Allocator) !Model {
+// Use to load a 3D model from an .obj file
+pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Model {
     // Create arrays
     var vertexes: std.ArrayList(math.Vec4) = .empty;
     var faces: std.ArrayList([3]math.Vec4) = .empty;
     defer vertexes.deinit(allocator.*);
-    // defer faces.deinit(allocator);
 
     // Get file reader
     var line_buf: [64]u8 = undefined;
