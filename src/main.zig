@@ -6,6 +6,7 @@ const math = @import("math.zig");
 const objects = @import("objects.zig");
 
 const Model = objects.Model;
+const Object = objects.Object;
 
 const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -88,7 +89,7 @@ fn processEvents(is_running: *bool) void {
     }
 }
 
-fn renderScene(fb: render.FrameBuffer, object: *Model) void {
+fn renderScene(fb: render.FrameBuffer, object: *Object) void {
     fb.clear();
     const world_camera = render.Camera{
         .position = .{ .x = 3, .y = 2, .z = 6 },
@@ -175,9 +176,14 @@ pub fn main() !void {
     var pixels: ?*anyopaque = null;
     var pitch: c_int = 0;
 
-    // Load object
+    // Load model
     const allocator = std.heap.page_allocator;
-    var object = try objects.loadModel("models/cow.obj", &allocator);
+    var model = try objects.loadModel("models/cow.obj", &allocator);
+    defer model.deinit();
+
+    // Prepare object
+    var object = try Object.init(model, &allocator);
+    object.moveTo(-4, 0, -2);  // Move cow closer to the center of the screen
     defer object.deinit();
 
     // TODO: better error handling

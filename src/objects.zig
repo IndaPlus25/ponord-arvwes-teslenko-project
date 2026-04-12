@@ -1,6 +1,71 @@
 const std = @import("std");
 const math = @import("math.zig");
 
+// An object with a position
+pub const Object = struct {
+    x: f32,
+    y: f32,
+    z: f32,
+
+    triangles: std.ArrayList([3]math.Vec4),
+    allocator: *const std.mem.Allocator,
+
+    pub fn init(model: Model, allocator: *const std.mem.Allocator) !Object {
+        return .{
+            .x = 0,
+            .y = 0,
+            .z = 0,
+            .triangles = try model.triangles.clone(allocator.*),
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *Object) void {
+        self.triangles.deinit(self.allocator.*);
+    }
+
+    // Move object by a vector
+    // TODO Refactor to accept a Vec3 or Vec4 as position
+    pub fn moveBy(self: *Object, x: f32, y: f32, z: f32) void {
+        // Update internal position
+        self.x += x;
+        self.y += y;
+        self.z += z;
+
+        // Update position of every triangle
+        for (0..self.*.triangles.items.len) |i| {
+            // Get old vectors
+            var vecs: [3]math.Vec4 = self.*.triangles.items[i];
+
+            // Loop over and update vectors
+            for (vecs, 0..) |vec, j| {
+                vecs[j] = .{
+                    .x = vec.x + x,
+                    .y = vec.y + y,
+                    .z = vec.z + z,
+                    .w = 1,
+                };
+            }
+
+            // Set triangle to updated version
+            self.*.triangles.items[i] = vecs;
+        }
+    }
+
+    // Move object to a position
+    // TODO Refactor to accept a Vec3 or Vec4 as position
+    pub fn moveTo(self: *Object, x: f32, y: f32, z: f32) void {
+        // Calculate difference and just "moveBy"
+        self.moveBy(
+            x - self.x,
+            y - self.y,
+            z - self.z,
+        );
+    }
+
+    // TODO Add functions for rotating object
+};
+
 // A loaded 3D model
 pub const Model = struct {
     triangles: std.ArrayList([3]math.Vec4),
