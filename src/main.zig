@@ -89,7 +89,7 @@ fn processEvents(is_running: *bool) void {
     }
 }
 
-fn renderScene(fb: render.FrameBuffer, object: *Object) void {
+fn renderScene(fb: render.FrameBuffer, object_list: *std.ArrayList(Object)) void {
     fb.clear();
     const world_camera = render.Camera{
         .position = .{ .x = 3, .y = 2, .z = 6 },
@@ -101,20 +101,22 @@ fn renderScene(fb: render.FrameBuffer, object: *Object) void {
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
     const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
 
-    for (object.*.triangles.items) |tri_v| {
-        const c0 = vp.mulVec4(tri_v[0]);
-        const c1 = vp.mulVec4(tri_v[1]);
-        const c2 = vp.mulVec4(tri_v[2]);
+    for (object_list.*.items) |object| {
+        for (object.triangles.items) |tri_v| {
+            const c0 = vp.mulVec4(tri_v[0]);
+            const c1 = vp.mulVec4(tri_v[1]);
+            const c2 = vp.mulVec4(tri_v[2]);
 
-        if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
+            if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
 
-        const v1 = c0.toPixel(fb.width, fb.height);
-        const v2 = c1.toPixel(fb.width, fb.height);
-        const v3 = c2.toPixel(fb.width, fb.height);
+            const v1 = c0.toPixel(fb.width, fb.height);
+            const v2 = c1.toPixel(fb.width, fb.height);
+            const v3 = c2.toPixel(fb.width, fb.height);
 
-        if (render.facingAway(v1, v2, v3)) continue;
-        render.fillTriangle(v1, v2, v3, fb, 0xFFFFFFFF);
-        render.drawTriangle(v1, v2, v3, fb, 0xFFFFFF00);
+            if (render.facingAway(v1, v2, v3)) continue;
+            render.fillTriangle(v1, v2, v3, fb, 0xFFFFFFFF);
+            render.drawTriangle(v1, v2, v3, fb, 0xFFFFFF00);
+        }
     }
 }
 
@@ -165,6 +167,8 @@ fn renderImGui(texture: *c.SDL_Texture) void {
 }
 
 pub fn main() !void {
+    const allocator = std.heap.page_allocator;  // TODO Maybe move into a global variable, and look into using a more efficient allocator for our intents and purposes
+
     const sdl_context = try initSdl();
     defer c.SDL_Quit();
     defer sdl_context.deinit();
@@ -176,15 +180,26 @@ pub fn main() !void {
     var pixels: ?*anyopaque = null;
     var pitch: c_int = 0;
 
-    // Load model
-    const allocator = std.heap.page_allocator;
-    var model = try objects.loadModel("models/cow.obj", &allocator);
-    defer model.deinit();
+    // Load models
+    var cow_model = try objects.loadModel("models/cow.obj", &allocator);
+    defer cow_model.deinit();
 
-    // Prepare object
-    var object = try Object.init(model, &allocator);
-    object.moveTo(-4, 0, -2);  // Move cow closer to the center of the screen
-    defer object.deinit();
+    var teapot_model = try objects.loadModel("models/teapot.obj", &allocator);
+    defer teapot_model.deinit();
+
+    // Prepare objects
+    var object_list: std.ArrayList(Object) = .empty;
+    defer object_list.deinit(allocator);
+
+    var cow_obj = try Object.init(cow_model, &allocator);
+    cow_obj.moveTo(-4, 0, -2);  // Move cow closer to the center of the screen
+    defer cow_obj.deinit();
+    try object_list.append(allocator, cow_obj);
+
+    var teapotobj = try Object.init(teapot_model, &allocator);
+    teapotobj.moveTo(-4, 3, -3);  // Move teapot above cow
+    defer teapotobj.deinit();
+    try object_list.append(allocator, teapotobj);
 
     // TODO: better error handling
     while (is_running) {
@@ -198,7 +213,7 @@ pub fn main() !void {
             .width = screen_width,
             .height = screen_height,
         };
-        renderScene(fb, &object);
+        renderScene(fb, &object_list);
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
         // present texture & draw imgui
