@@ -3,6 +3,9 @@
 const std = @import("std");
 const render = @import("render.zig");
 const math = @import("math.zig");
+const loader = @import("loader.zig");
+
+const Model = loader.Model;
 
 const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -85,7 +88,7 @@ fn processEvents(is_running: *bool) void {
     }
 }
 
-fn renderScene(fb: render.FrameBuffer) void {
+fn renderScene(fb: render.FrameBuffer, object: *Model) void {
     fb.clear();
     const world_camera = render.Camera{
         .position = .{ .x = 3, .y = 2, .z = 6 },
@@ -97,32 +100,7 @@ fn renderScene(fb: render.FrameBuffer) void {
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
     const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
 
-    const cx: f32 = 1;
-    const cy: f32 = 1;
-    const cz: f32 = 3;
-
-    const tris = [_][3]math.Vec4{
-        // back face
-        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 } },
-        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
-        // front face
-        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
-        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
-        // left face
-        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
-        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
-        // right face
-        .{ .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
-        .{ .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
-        // bottom face
-        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
-        .{ .{ .x = -1 + cx, .y = -1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = -1 + cy, .z = 1 + cz, .w = 1 } },
-        // top face
-        .{ .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 } },
-        .{ .{ .x = -1 + cx, .y = 1 + cy, .z = -1 + cz, .w = 1 }, .{ .x = -1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 }, .{ .x = 1 + cx, .y = 1 + cy, .z = 1 + cz, .w = 1 } },
-    };
-
-    for (tris) |tri_v| {
+    for (object.*.triangles.items) |tri_v| {
         const c0 = vp.mulVec4(tri_v[0]);
         const c1 = vp.mulVec4(tri_v[1]);
         const c2 = vp.mulVec4(tri_v[2]);
@@ -197,6 +175,11 @@ pub fn main() !void {
     var pixels: ?*anyopaque = null;
     var pitch: c_int = 0;
 
+    // Load object
+    const allocator = std.heap.page_allocator;
+    var object = try loader.loadObjFile("models/cow.obj", &allocator);
+    defer object.deinit();
+
     // TODO: better error handling
     while (is_running) {
         processEvents(&is_running);
@@ -209,7 +192,7 @@ pub fn main() !void {
             .width = screen_width,
             .height = screen_height,
         };
-        renderScene(fb);
+        renderScene(fb, &object);
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
         // present texture & draw imgui
