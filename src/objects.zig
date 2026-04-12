@@ -34,7 +34,9 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
         var iter = std.mem.tokenizeAny(u8, str, " \n");
         
         // Check for line type and parse accordingly
-        const key = iter.next().?;
+        const nxt = iter.next();
+        if (nxt == null) continue;  // Means that we have a blank line
+        const key = nxt.?;
         
         if (std.mem.eql(u8, key, "v")) {  // Parse for vertexes
             try vertexes.append(allocator.*, .{
