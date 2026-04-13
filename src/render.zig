@@ -29,6 +29,41 @@ pub const FrameBuffer = struct {
     }
 };
 
+pub const ZBuffer = struct {
+    data: []f32,
+    width: usize,
+    height: usize,
+    allocator: std.mem.Allocator,
+
+    pub fn init(width: c_int, height: c_int) !ZBuffer {
+        const uWidth = @as(usize, @intCast(width));
+        const uHeight = @as(usize, @intCast(height));
+        const allocator = std.heap.page_allocator;
+
+        const data = try allocator.alloc(f32, uWidth * uHeight);
+        var zBuffer = ZBuffer{ .data = data, .width = uWidth, .height = uHeight, .allocator = allocator };
+        zBuffer.clear();
+        return zBuffer;
+    }
+
+    pub fn clear(self: ZBuffer) void {
+        @memset(self.data, 1.0);
+    }
+
+    pub fn deinit(self: ZBuffer) void {
+        self.allocator.free(self.data);
+    }
+
+    pub fn getDepth(self: ZBuffer, x: usize, y: usize) f32 {
+        const index = x + y * self.width;
+        return self.data[index];
+    }
+    pub fn setDepth(self: ZBuffer, x: usize, y: usize, depth: f32) void {
+        const index = x + y * self.width;
+        self.data[index] = depth;
+    }
+};
+
 pub fn drawTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) void {
     drawLine(v1, v2, fb, color);
     drawLine(v1, v3, fb, color);
@@ -87,6 +122,7 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) v
 // TODO: handle off screen triangles so we don't waste resources
 fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color: u32) void {
     // a is the short edge, b is the long edge
+
     const a_dy = a1.y - a0.y;
     const b_dy = b1.y - b0.y;
     if (a_dy == 0 or b_dy == 0) return;
@@ -102,6 +138,7 @@ fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color:
         var x = floatToPixel(@min(a.x, b.x));
         const x_end = floatToPixel(@max(a.x, b.x));
         while (x <= x_end) : (x += 1) {
+            // TODO calculate pixel depth and check if (zb.getDepth(x, y) < depthOFP) {}
             fb.setPixel(x, y, color);
         }
     }

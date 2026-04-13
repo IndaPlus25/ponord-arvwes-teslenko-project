@@ -167,7 +167,7 @@ fn renderImGui(texture: *c.SDL_Texture) void {
 }
 
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;  // TODO Maybe move into a global variable, and look into using a more efficient allocator for our intents and purposes
+    const allocator = std.heap.page_allocator; // TODO Maybe move into a global variable, and look into using a more efficient allocator for our intents and purposes
 
     const sdl_context = try initSdl();
     defer c.SDL_Quit();
@@ -192,12 +192,12 @@ pub fn main() !void {
     defer object_list.deinit(allocator);
 
     var cow_obj = try Object.init(cow_model, &allocator);
-    cow_obj.moveTo(-4, 0, -2);  // Move cow closer to the center of the screen
+    cow_obj.moveTo(-4, 0, -2); // Move cow closer to the center of the screen
     defer cow_obj.deinit();
     try object_list.append(allocator, cow_obj);
 
     var teapotobj = try Object.init(teapot_model, &allocator);
-    teapotobj.moveTo(-4, 3, -3);  // Move teapot above cow
+    teapotobj.moveTo(-4, 3, -3); // Move teapot above cow
     defer teapotobj.deinit();
     try object_list.append(allocator, teapotobj);
 
