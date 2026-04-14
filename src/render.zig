@@ -18,7 +18,7 @@ pub const FrameBuffer = struct {
     width: c_int,
     height: c_int,
 
-    pub fn setPixel(self: FrameBuffer, x: isize, y: isize, color: u32) void {
+    pub fn setPixel(self: FrameBuffer, x: usize, y: usize, color: u32) void {
         if (x >= 0 and x < self.width and y >= 0 and y < self.height) {
             self.data[@as(usize, @intCast(y)) * self.stride + @as(usize, @intCast(x))] = color;
         }
@@ -70,15 +70,15 @@ pub fn drawTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) v
     drawLine(v2, v3, fb, color);
 }
 
-fn floatToPixel(v: f32) isize {
-    return @as(isize, @intFromFloat(@round(v)));
+fn floatToPixel(v: f32) usize {
+    return @as(usize, @intFromFloat(@round(v)));
 }
 
 pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, color: u32) void {
-    var x0 = floatToPixel(start.x);
-    var y0 = floatToPixel(start.y);
-    const x1 = floatToPixel(end.x);
-    const y1 = floatToPixel(end.y);
+    var x0: isize = @intCast(floatToPixel(start.x));
+    var y0: isize = @intCast(floatToPixel(start.y));
+    const x1: isize = @intCast(floatToPixel(end.x));
+    const y1: isize = @intCast(floatToPixel(end.y));
 
     const dx: isize = @as(isize, @intCast(@abs(x1 - x0)));
     const dy: isize = -@as(isize, @intCast(@abs(y1 - y0)));
@@ -88,7 +88,7 @@ pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, color: u32) void {
     var err = dx + dy;
 
     while (true) {
-        fb.setPixel(x0, y0, color);
+        fb.setPixel(@intCast(x0), @intCast(y0), color);
 
         const e2 = 2 * err;
         if (e2 >= dy) {
@@ -104,7 +104,7 @@ pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, color: u32) void {
     }
 }
 
-pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) void {
+pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
     var p0 = v1;
     var p1 = v2;
     var p2 = v3;
@@ -114,13 +114,13 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) v
 
     if (p0.y == p2.y) return; // not a triangle
 
-    fillScanlines(p0, p1, p0, p2, fb, color); // a = p0 -> p1 (short), b = p0 -> p2 (long)
-    fillScanlines(p1, p2, p0, p2, fb, color); // a = p1 -> p2 (short), b = p0 -> p2 (long)
+    fillScanlines(p0, p1, p0, p2, fb, zb, color); // a = p0 -> p1 (short), b = p0 -> p2 (long)
+    fillScanlines(p1, p2, p0, p2, fb, zb, color); // a = p1 -> p2 (short), b = p0 -> p2 (long)
 }
 
 // TODO: we're drawing the middle vertex twice since both are inclusive, idk if this will cause a problem
 // TODO: handle off screen triangles so we don't waste resources
-fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color: u32) void {
+fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
     // a is the short edge, b is the long edge
 
     const a_dy = a1.y - a0.y;
@@ -135,11 +135,25 @@ fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, color:
         const a = Vec3.lerp(a0, a1, (fy - a0.y) / a_dy);
         const b = Vec3.lerp(b0, b1, (fy - b0.y) / b_dy);
 
-        var x = floatToPixel(@min(a.x, b.x));
-        const x_end = floatToPixel(@max(a.x, b.x));
+        const left = if (a.x < b.x) a else b;
+        const right = if (a.x < b.x) b else a;
+
+        var x = floatToPixel(left.x);
+        const x_end = floatToPixel(right.x);
+
+        const dy_dx: f32 = if (right.x - left.x > 0)
+            (right.z - left.z) / (right.x - left.x)
+        else
+            0;
+
+        var z = left.z;
+
         while (x <= x_end) : (x += 1) {
-            // TODO calculate pixel depth and check if (zb.getDepth(x, y) < depthOFP) {}
-            fb.setPixel(x, y, color);
+            if (zb.getDepth(x, y) > z) {
+                fb.setPixel(x, y, color);
+                zb.setDepth(x, y, z);
+            }
+            z += dy_dx;
         }
     }
 }
