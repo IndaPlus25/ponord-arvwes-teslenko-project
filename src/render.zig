@@ -64,31 +64,45 @@ pub const ZBuffer = struct {
     }
 };
 
-pub fn drawTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, color: u32) void {
-    drawLine(v1, v2, fb, color);
-    drawLine(v1, v3, fb, color);
-    drawLine(v2, v3, fb, color);
+pub fn drawTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
+    drawLine(v1, v2, fb, zb, color);
+    drawLine(v1, v3, fb, zb, color);
+    drawLine(v2, v3, fb, zb, color);
 }
 
-fn floatToPixel(v: f32) usize {
-    return @as(usize, @intFromFloat(@round(v)));
+fn floatToPixel(v: f32) isize {
+    return @as(isize, @intFromFloat(@round(v)));
 }
 
-pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, color: u32) void {
-    var x0: isize = @intCast(floatToPixel(start.x));
-    var y0: isize = @intCast(floatToPixel(start.y));
-    const x1: isize = @intCast(floatToPixel(end.x));
-    const y1: isize = @intCast(floatToPixel(end.y));
+pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
+    var x0: isize = (floatToPixel(start.x));
+    var y0: isize = (floatToPixel(start.y));
+    var z0: f32 = start.z;
+    const x1: isize = (floatToPixel(end.x));
+    const y1: isize = (floatToPixel(end.y));
+    const z1: f32 = end.z;
 
     const dx: isize = @as(isize, @intCast(@abs(x1 - x0)));
     const dy: isize = -@as(isize, @intCast(@abs(y1 - y0)));
+    const dz: f32 = z1 - z0;
+
     const sx: isize = if (x0 < x1) 1 else -1;
     const sy: isize = if (y0 < y1) 1 else -1;
 
     var err = dx + dy;
 
+    const steps: f32 = @floatFromInt(if (dx >= -dy) dx else -dy);
+    const dz_dsteps: f32 = if (steps > 0) dz / steps else 0.0;
+
     while (true) {
-        fb.setPixel(@intCast(x0), @intCast(y0), color);
+        if (x0 >= 0 and y0 >= 0 and x0 <= fb.width and y0 <= fb.height) {
+            const ux0: usize = @intCast(x0);
+            const uy0: usize = @intCast(y0);
+            if (zb.getDepth(ux0, uy0) > z0) {
+                fb.setPixel(ux0, uy0, color);
+                zb.setDepth(ux0, uy0, z0);
+            }
+        }
 
         const e2 = 2 * err;
         if (e2 >= dy) {
@@ -101,6 +115,7 @@ pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, color: u32) void {
             err += dx;
             y0 += sy;
         }
+        z0 += dz_dsteps;
     }
 }
 
@@ -149,9 +164,13 @@ fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, zb: *Z
         var z = left.z;
 
         while (x <= x_end) : (x += 1) {
-            if (zb.getDepth(x, y) > z) {
-                fb.setPixel(x, y, color);
-                zb.setDepth(x, y, z);
+            if (isInBounds(x, y, fb.width, fb.height)) {
+                const ux: usize = @intCast(x);
+                const uy: usize = @intCast(y);
+                if (zb.getDepth(ux, uy) > z) {
+                    fb.setPixel(ux, uy, color);
+                    zb.setDepth(ux, uy, z);
+                }
             }
             z += dy_dx;
         }
@@ -163,4 +182,8 @@ pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
     const edge1 = v2.sub(v1);
     const edge2 = v3.sub(v1);
     return edge1.cross(edge2).z >= 0;
+}
+
+pub fn isInBounds(x: isize, y: isize, width: c_int, height: c_int) bool {
+    return (x >= 0 and y >= 0 and x <= @as(isize, @intCast(width)) and y <= @as(isize, @intCast(height)));
 }

@@ -116,7 +116,7 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
             if (render.facingAway(v1, v2, v3)) continue;
             const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
             render.fillTriangle(v1, v2, v3, fb, zb, color);
-            render.drawTriangle(v1, v2, v3, fb, 0x000000FF);
+            render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
         }
     }
 }
@@ -193,12 +193,12 @@ pub fn main() !void {
     defer object_list.deinit(allocator);
 
     var cow_obj = try Object.init(cow_model, &allocator);
-    cow_obj.moveTo(-4, 0, -5); // Move cow closer to the center of the screen
+    cow_obj.moveTo(-4, 3, -1); // Move cow closer to the center of the screen
     defer cow_obj.deinit();
     try object_list.append(allocator, cow_obj);
 
     var teapotobj = try Object.init(teapot_model, &allocator);
-    teapotobj.moveTo(-4, 0, -1); // Move teapot above cow
+    teapotobj.moveTo(-4, 0, -5); // Move teapot above cow
     defer teapotobj.deinit();
     try object_list.append(allocator, teapotobj);
 
