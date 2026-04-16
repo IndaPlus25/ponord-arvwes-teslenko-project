@@ -191,7 +191,7 @@ fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32, triang
     }
     c.ImGui_End();
 
-    // Render Metrics (FPS, etc)
+    // Render Metrics (Triangle counts, etc)
     if (c.ImGui_Begin("Render Metrics", null, 0)) {
         c.ImGui_Text("Total Triangles: %d", triangles[0]);
         c.ImGui_Text("Drawn Triangles: %d", triangles[1]);
