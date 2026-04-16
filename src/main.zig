@@ -67,7 +67,7 @@ fn initImGui(window: *c.SDL_Window, renderer: *c.SDL_Renderer) *c.ImGuiContext {
     const context = c.ImGui_CreateContext(null).?;
     const io = c.ImGui_GetIO();
     io.*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
-    io.*.IniFilename = "config/imgui.ini";
+    io.*.IniFilename = "./src/config/imgui.ini"; // This makes the program both load and save the config automatically. TODO: Look into removing auto save of the config
     _ = c.cImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     _ = c.cImGui_ImplSDLRenderer3_Init(renderer);
     return context;
