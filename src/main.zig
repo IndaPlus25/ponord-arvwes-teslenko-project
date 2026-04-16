@@ -222,8 +222,7 @@ pub fn main() !void {
 
     // Performance variables
     const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
-
-    var last_count: u64 = 0; // Last time that a frame was counted
+    var last_count: u64 = c.SDL_GetPerformanceCounter(); // Last time that a frame was counted
     var frame_times: [graph_samples]f32 = undefined; // An array with all frame time data points
 
     // TODO: better error handling
