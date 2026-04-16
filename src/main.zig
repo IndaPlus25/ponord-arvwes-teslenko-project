@@ -170,11 +170,11 @@ fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32) void {
     if (c.ImGui_Begin("Performance Metrics", null, 0)) {
         const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples; // Sums array and divides by amount of samples to get average
 
-        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[0]);
+        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[graph_samples-1]);
         c.ImGui_Text("Avg. FPS: %.2f", 1000.0 / avg_delay);
 
         c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
-        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[0]);
+        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples-1]);
         c.ImGui_Text("Avg. Frame Time: %.2f ms", avg_delay);
 
         c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
