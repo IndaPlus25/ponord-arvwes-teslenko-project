@@ -121,7 +121,7 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
     }
 }
 
-fn renderImGui(texture: *c.SDL_Texture) void {
+fn renderImGui(texture: *c.SDL_Texture, fps: f32, delay: f32) void {
     c.cImGui_ImplSDLRenderer3_NewFrame();
     c.cImGui_ImplSDL3_NewFrame();
     c.ImGui_NewFrame();
@@ -164,6 +164,13 @@ fn renderImGui(texture: *c.SDL_Texture) void {
     }
     c.ImGui_End();
 
+    // Performance Metrics (FPS, etc)
+    if (c.ImGui_Begin("Performance Metrics", null, 0)) {
+        c.ImGui_Text("FPS: %.2f", fps);
+        c.ImGui_Text("Frame Time: %.2f ms", delay*1000);
+    }
+    c.ImGui_End();
+
     c.ImGui_Render();
 }
 
@@ -202,8 +209,19 @@ pub fn main() !void {
     defer teapotobj.deinit();
     try object_list.append(allocator, teapotobj);
 
+    // Performance variables
+    var last_count: u64 = 0; // Last time that a frame was counted
+    const frequency = c.SDL_GetPerformanceFrequency();  // Get SDL counter ticks per second
+
     // TODO: better error handling
     while (is_running) {
+        // Calculate performance metrics
+        const current_count = c.SDL_GetPerformanceCounter(); // Get current tick count
+        const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency));  // Calculate delay between frames in seconds
+        const fps = 1.0 / delta; // Calculate FPS
+        last_count = current_count;
+
+        // Process events
         processEvents(&is_running);
 
         // rasterize to texture
@@ -222,7 +240,7 @@ pub fn main() !void {
         _ = c.SDL_SetRenderDrawColorFloat(sdl_context.renderer, 0, 0, 0, 1);
         _ = c.SDL_RenderClear(sdl_context.renderer);
 
-        renderImGui(sdl_context.texture);
+        renderImGui(sdl_context.texture, fps, delta);
         c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), sdl_context.renderer);
 
         _ = c.SDL_RenderPresent(sdl_context.renderer);
