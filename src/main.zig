@@ -23,6 +23,8 @@ const screen_width: c_int = 1920;
 const screen_height: c_int = 1080;
 const screen_title: [*c]const u8 = "working-title";
 
+const graph_samples: usize = 120; // Amount of data points to display in graphs
+
 const SdlContext = struct {
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
@@ -121,7 +123,7 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
     }
 }
 
-fn renderImGui(texture: *c.SDL_Texture, fps: f32, delay: f32) void {
+fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32) void {
     c.cImGui_ImplSDLRenderer3_NewFrame();
     c.cImGui_ImplSDL3_NewFrame();
     c.ImGui_NewFrame();
@@ -166,8 +168,17 @@ fn renderImGui(texture: *c.SDL_Texture, fps: f32, delay: f32) void {
 
     // Performance Metrics (FPS, etc)
     if (c.ImGui_Begin("Performance Metrics", null, 0)) {
-        c.ImGui_Text("FPS: %.2f", fps);
-        c.ImGui_Text("Frame Time: %.2f ms", delay*1000);
+        const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples; // Sums array and divides by amount of samples to get average
+
+        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[0]);
+        c.ImGui_Text("Avg. FPS: %.2f", 1000.0 / avg_delay);
+
+        c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
+        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[0]);
+        c.ImGui_Text("Avg. Frame Time: %.2f ms", avg_delay);
+
+        c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
+        c.ImGui_PlotLines("Frame Times", frame_times, graph_samples);
     }
     c.ImGui_End();
 
@@ -210,16 +221,20 @@ pub fn main() !void {
     try object_list.append(allocator, teapotobj);
 
     // Performance variables
+    const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
+
     var last_count: u64 = 0; // Last time that a frame was counted
-    const frequency = c.SDL_GetPerformanceFrequency();  // Get SDL counter ticks per second
+    var frame_times: [graph_samples]f32 = undefined; // An array with all frame time data points
 
     // TODO: better error handling
     while (is_running) {
         // Calculate performance metrics
         const current_count = c.SDL_GetPerformanceCounter(); // Get current tick count
         const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency));  // Calculate delay between frames in seconds
-        const fps = 1.0 / delta; // Calculate FPS
         last_count = current_count;
+
+        @memmove(frame_times[0..graph_samples-1], frame_times[1..graph_samples]);  // Shift array contents one step to the left
+        frame_times[graph_samples - 1] = delta * 1000;  // Add data point at the end
 
         // Process events
         processEvents(&is_running);
@@ -240,7 +255,7 @@ pub fn main() !void {
         _ = c.SDL_SetRenderDrawColorFloat(sdl_context.renderer, 0, 0, 0, 1);
         _ = c.SDL_RenderClear(sdl_context.renderer);
 
-        renderImGui(sdl_context.texture, fps, delta);
+        renderImGui(sdl_context.texture, &frame_times);
         c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), sdl_context.renderer);
 
         _ = c.SDL_RenderPresent(sdl_context.renderer);
