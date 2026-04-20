@@ -137,7 +137,6 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer,
 // TODO: handle off screen triangles so we don't waste resources
 fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
     // a is the short edge, b is the long edge
-
     const a_dy = a1.y - a0.y;
     const b_dy = b1.y - b0.y;
     if (a_dy == 0 or b_dy == 0) return;
@@ -182,6 +181,43 @@ pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
     const edge1 = v2.sub(v1);
     const edge2 = v3.sub(v1);
     return edge1.cross(edge2).z >= 0;
+}
+pub fn vertexIlum(v: Vec3, normal: Vec3) f32 {
+    const ambient: f32 = 0.1;
+    const light_source = Vec3{ .x = -3, .y = 3, .z = 0.3 };
+    const light_dir = light_source.sub(v);
+
+    const diffuse_light: f32 = normal.dot(light_dir.norm()) * 2.5;
+    if (diffuse_light <= 0) {
+        return ambient;
+    }
+    const total = ambient + diffuse_light;
+    if (total > 1) {
+        return 1;
+    }
+    return total;
+}
+pub fn multiplyRgb(color: u32, factor: f32) u32 {
+    // 1. Extract the individual channels using bitwise operations
+    const r = (color >> 24) & 0xFF;
+    const g = (color >> 16) & 0xFF;
+    const b = (color >> 8) & 0xFF;
+    const a = color & 0xFF;
+
+    // 2. Convert to f32, multiply, and clamp
+    // We use std.math.clamp to ensure the float stays between 0.0 and 255.0
+    const new_r_f = std.math.clamp(@as(f32, @floatFromInt(r)) * factor, 0.0, 255.0);
+    const new_g_f = std.math.clamp(@as(f32, @floatFromInt(g)) * factor, 0.0, 255.0);
+    const new_b_f = std.math.clamp(@as(f32, @floatFromInt(b)) * factor, 0.0, 255.0);
+
+    // 3. Convert back to u32
+    // @intFromFloat implicitly truncates the decimal portion
+    const new_r: u32 = @intFromFloat(new_r_f);
+    const new_g: u32 = @intFromFloat(new_g_f);
+    const new_b: u32 = @intFromFloat(new_b_f);
+
+    // 4. Shift the channels back to their positions and combine them
+    return (new_r << 24) | (new_g << 16) | (new_b << 8) | a;
 }
 
 pub fn isInBounds(x: isize, y: isize, width: c_int, height: c_int) bool {

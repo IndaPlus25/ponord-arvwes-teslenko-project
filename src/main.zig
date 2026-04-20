@@ -100,7 +100,6 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
     const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
-
     for (object_list.*.items) |object| {
         for (object.triangles.items) |tri_v| {
             const c0 = vp.mulVec4(tri_v[0]);
@@ -109,14 +108,26 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
 
             if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
 
+            const p0 = tri_v[0].toVec3();
+            const p1 = tri_v[1].toVec3();
+            const p2 = tri_v[2].toVec3();
+
+            const normal = p0.normalVector(p1, p2);
+            const v0_ilum = render.vertexIlum(p0, normal);
+            const v1_ilum = render.vertexIlum(p1, normal);
+            const v2_ilum = render.vertexIlum(p2, normal);
+            const ilum_avg: f32 = (v0_ilum + v1_ilum + v2_ilum) / 3.0;
+            //std.debug.print("   {d:.2}    ", .{ilum_avg});
+
             const v1 = c0.toPixel(fb.width, fb.height);
             const v2 = c1.toPixel(fb.width, fb.height);
             const v3 = c2.toPixel(fb.width, fb.height);
 
             if (render.facingAway(v1, v2, v3)) continue;
             const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
-            render.fillTriangle(v1, v2, v3, fb, zb, color);
-            render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
+            const color2: u32 = render.multiplyRgb(color, ilum_avg);
+            render.fillTriangle(v1, v2, v3, fb, zb, color2);
+            // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
         }
     }
 }
@@ -193,12 +204,12 @@ pub fn main() !void {
     defer object_list.deinit(allocator);
 
     var cow_obj = try Object.init(cow_model, &allocator);
-    cow_obj.moveTo(-4, 3, -1); // Move cow closer to the center of the screen
+    cow_obj.moveTo(-4, 2, -1); //
     defer cow_obj.deinit();
     try object_list.append(allocator, cow_obj);
 
     var teapotobj = try Object.init(teapot_model, &allocator);
-    teapotobj.moveTo(-4, 0, -5); // Move teapot above cow
+    teapotobj.moveTo(-2, 0, -5);
     defer teapotobj.deinit();
     try object_list.append(allocator, teapotobj);
 
