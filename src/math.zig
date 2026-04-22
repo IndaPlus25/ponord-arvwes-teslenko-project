@@ -41,6 +41,12 @@ pub const Vec3 = struct {
         const lerp_t = std.math.clamp(t, 0, 1);
         return v.sub(u).mul(lerp_t).add(u);
     }
+
+    pub fn normalVector(self: Vec3, p: Vec3, q: Vec3) Vec3 {
+        const edge1 = p.sub(self);
+        const edge2 = q.sub(self);
+        return cross(edge1, edge2).norm();
+    }
 };
 
 pub const Vec4 = struct {
