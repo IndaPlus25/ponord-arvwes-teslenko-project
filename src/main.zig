@@ -97,6 +97,13 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
     };
     const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
 
+    const light_sources = [_]render.LightSource{
+        .{ .SkyLight = .{ .brightness = 1 } },
+        .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
+    };
+
+    const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
+
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
     const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
@@ -112,12 +119,7 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
             const p1 = tri_v[1].toVec3();
             const p2 = tri_v[2].toVec3();
 
-            const normal = p0.normalVector(p1, p2);
-            const v0_ilum = render.vertexIlum(p0, normal);
-            const v1_ilum = render.vertexIlum(p1, normal);
-            const v2_ilum = render.vertexIlum(p2, normal);
-            const ilum_avg: f32 = (v0_ilum + v1_ilum + v2_ilum) / 3.0;
-            //std.debug.print("   {d:.2}    ", .{ilum_avg});
+            const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
 
             const v1 = c0.toPixel(fb.width, fb.height);
             const v2 = c1.toPixel(fb.width, fb.height);
@@ -125,7 +127,7 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
 
             if (render.facingAway(v1, v2, v3)) continue;
             const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
-            const color2: u32 = render.multiplyRgb(color, ilum_avg);
+            const color2: u32 = render.multiplyRgb(color, tri_ilum);
             render.fillTriangle(v1, v2, v3, fb, zb, color2);
             // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
         }

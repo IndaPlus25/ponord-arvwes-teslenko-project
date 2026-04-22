@@ -11,6 +11,57 @@ pub const Camera = struct {
     near: f32 = 0.1, // distance to near plane
     far: f32 = 1000.0, // distance to far plane
 };
+pub const WorldLighting = struct {
+    ambient: f32 = 0.3,
+    light_sources: []const LightSource,
+    pub fn SkyDirection() Vec3 {
+        return .{ .x = 0, .y = 1, .z = 0 };
+    }
+    //returns a scalefactor 0..=1 based on avg brightnes on the given triangle
+    pub fn triangleIlum(self: WorldLighting, v1: Vec3, v2: Vec3, v3: Vec3) f32 {
+        var total: f32 = 0;
+
+        const normal = v1.normalVector(v2, v3);
+        for (0..3) |i| {
+            const v: Vec3 = switch (i) {
+                0 => v1,
+                1 => v2,
+                2 => v3,
+                else => unreachable,
+            };
+            var vertex_brightness = self.ambient;
+
+            for (self.light_sources) |source| {
+                var light_dir = Vec3{ .x = 0, .y = 0, .z = 0 };
+                var source_brightness: f32 = 0;
+                switch (source) {
+                    .SkyLight => |sky| {
+                        light_dir = Vec3{ .x = 0, .y = 1, .z = 0 };
+                        source_brightness = sky.brightness;
+                    },
+                    .PointLight => |pt_light| {
+                        light_dir = pt_light.position.sub(v);
+                        source_brightness = pt_light.brightness;
+                    },
+                }
+                const diffuse_light = normal.dot(light_dir.norm()) * source_brightness;
+                if (diffuse_light > 0) {
+                    vertex_brightness += diffuse_light;
+                }
+            }
+            if (vertex_brightness > 1.0) {
+                vertex_brightness = 1.0;
+            }
+            total += vertex_brightness;
+        }
+        return total / 3;
+    }
+};
+
+pub const LightSource = union(enum) {
+    SkyLight: struct { brightness: f32 },
+    PointLight: struct { position: Vec3, brightness: f32 },
+};
 
 pub const FrameBuffer = struct {
     data: [*]u32,
@@ -182,21 +233,7 @@ pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
     const edge2 = v3.sub(v1);
     return edge1.cross(edge2).z >= 0;
 }
-pub fn vertexIlum(v: Vec3, normal: Vec3) f32 {
-    const ambient: f32 = 0.1;
-    const light_source = Vec3{ .x = -3, .y = 3, .z = 0.3 };
-    const light_dir = light_source.sub(v);
 
-    const diffuse_light: f32 = normal.dot(light_dir.norm()) * 2.5;
-    if (diffuse_light <= 0) {
-        return ambient;
-    }
-    const total = ambient + diffuse_light;
-    if (total > 1) {
-        return 1;
-    }
-    return total;
-}
 pub fn multiplyRgb(color: u32, factor: f32) u32 {
     // 1. Extract the individual channels using bitwise operations
     const r = (color >> 24) & 0xFF;
