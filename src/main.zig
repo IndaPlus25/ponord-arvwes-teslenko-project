@@ -81,10 +81,33 @@ fn deinitImGui(context: *c.ImGuiContext) void {
     c.ImGui_DestroyContext(context);
 }
 
-fn processEvents(is_running: *bool) void {
+fn processEvents(is_running: *bool, world_camera: *render.Camera) void {
     var event: c.SDL_Event = undefined;
+    var in_viewport: bool = true;
+
+    if (in_viewport) {
+        _ = c.SDL_HideCursor();
+    } else {
+        _ = c.SDL_ShowCursor();
+    }
+
     while (c.SDL_PollEvent(&event)) {
         _ = c.cImGui_ImplSDL3_ProcessEvent(&event);
+
+        // Capture mouse input
+        if (event.type == c.SDL_EVENT_MOUSE_MOTION and in_viewport) {
+            world_camera.yaw = event.motion.x;
+            world_camera.pitch = event.motion.y;
+        }
+
+        // Toggle between mouse viewport capture
+        if (event.type == c.SDL_EVENT_KEY_DOWN) {
+            if (c.SDL_EVENT_KEY_DOWN == c.SDL_SCANCODE_TAB) {
+                in_viewport = !in_viewport;
+            }
+        }
+
+        // Terminate window
         if (event.type == c.SDL_EVENT_QUIT) {
             is_running.* = false;
         }
@@ -138,7 +161,6 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
             const color2: u32 = render.multiplyRgb(color, tri_ilum);
             render.fillTriangle(v1, v2, v3, fb, zb, color2);
             // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
-
 
             drawn_triangles += 1;
         }
@@ -194,11 +216,11 @@ fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32, triang
     if (c.ImGui_Begin("Performance Metrics", null, 0)) {
         const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples; // Sums array and divides by amount of samples to get average
 
-        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[graph_samples-1]);
+        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[graph_samples - 1]);
         c.ImGui_Text("Avg. FPS: %.2f", 1000.0 / avg_delay);
 
         c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
-        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples-1]);
+        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples - 1]);
         c.ImGui_Text("Avg. Frame Time: %.2f ms", avg_delay);
 
         c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
@@ -260,11 +282,11 @@ pub fn main() !void {
     while (is_running) {
         // Calculate performance metrics
         const current_count = c.SDL_GetPerformanceCounter(); // Get current tick count
-        const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency));  // Calculate delay between frames in seconds
+        const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency)); // Calculate delay between frames in seconds
         last_count = current_count;
 
-        @memmove(frame_times[0..graph_samples-1], frame_times[1..graph_samples]);  // Shift array contents one step to the left
-        frame_times[graph_samples - 1] = delta * 1000;  // Add data point at the end
+        @memmove(frame_times[0 .. graph_samples - 1], frame_times[1..graph_samples]); // Shift array contents one step to the left
+        frame_times[graph_samples - 1] = delta * 1000; // Add data point at the end
 
         // Process events
         processEvents(&is_running);

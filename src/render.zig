@@ -4,13 +4,16 @@ const Vec3 = math.Vec3;
 const Vec4 = math.Vec4;
 
 pub const Camera = struct {
-    position: Vec3 = .{ .x = 0, .y = 0, .z = 0 }, // world pos
-    target: Vec3 = .{ .x = 0, .y = 0, .z = -1 }, // looking at
+    position: Vec3 = .{ .x = 0, .y = 0, .z = 0 }, // initial world pos
+    yaw: f32 = 0, // rotation around the up vector (left/right) in radians
+    pitch: f32 = 0, // rotation around the camera right axis (up/down) in radians
+    target: Vec3 = .{ .x = 0, .y = 0, .z = -1 },
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
-    fov: f32 = 80, // degrees
+    fov: f32 = 80, // field of view in degrees
     near: f32 = 0.1, // distance to near plane
     far: f32 = 1000.0, // distance to far plane
 };
+
 pub const WorldLighting = struct {
     ambient: f32 = 0.3,
     light_sources: []const LightSource,
