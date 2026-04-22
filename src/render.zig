@@ -7,7 +7,7 @@ pub const Camera = struct {
     position: Vec3 = .{ .x = 0, .y = 0, .z = 0 }, // initial world pos
     yaw: f32 = 0, // rotation around the up vector (left/right) in radians
     pitch: f32 = 0, // rotation around the camera right axis (up/down) in radians
-    target: Vec3 = .{ .x = 0, .y = 0, .z = -1 },
+    sensitivity: f32 = 0.002, // mouse sensitivity
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
     fov: f32 = 80, // field of view in degrees
     near: f32 = 0.1, // distance to near plane

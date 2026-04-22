@@ -37,6 +37,11 @@ const SdlContext = struct {
     }
 };
 
+const AppState = struct {
+    is_running: bool = true,
+    mouse_captured: bool = true,
+};
+
 fn initSdl() !SdlContext {
     var window: ?*c.SDL_Window = null;
     var renderer: ?*c.SDL_Renderer = null;
@@ -81,35 +86,25 @@ fn deinitImGui(context: *c.ImGuiContext) void {
     c.ImGui_DestroyContext(context);
 }
 
-fn processEvents(is_running: *bool, world_camera: *render.Camera) void {
+fn processEvents(app_state: *AppState, world_camera: *render.Camera) void {
     var event: c.SDL_Event = undefined;
-    var in_viewport: bool = true;
-
-    if (in_viewport) {
-        _ = c.SDL_HideCursor();
-    } else {
-        _ = c.SDL_ShowCursor();
-    }
-
     while (c.SDL_PollEvent(&event)) {
         _ = c.cImGui_ImplSDL3_ProcessEvent(&event);
 
         // Capture mouse input
-        if (event.type == c.SDL_EVENT_MOUSE_MOTION and in_viewport) {
-            world_camera.yaw = event.motion.x;
-            world_camera.pitch = event.motion.y;
-        }
-
-        // Toggle between mouse viewport capture
-        if (event.type == c.SDL_EVENT_KEY_DOWN) {
-            if (c.SDL_EVENT_KEY_DOWN == c.SDL_SCANCODE_TAB) {
-                in_viewport = !in_viewport;
+        if (app_state.mouse_captured) {
+            if (event.type == c.SDL_EVENT_MOUSE_MOTION) {
+                world_camera.yaw += event.motion.xrel * world_camera.sensitivity;
+                world_camera.pitch -= event.motion.yrel * world_camera.sensitivity;
+            }
+            if (event.type == c.SDL_EVENT_KEY_DOWN and event.key.key == c.SDLK_ESCAPE) {
+                app_state.mouse_captured = false;
             }
         }
 
         // Terminate window
         if (event.type == c.SDL_EVENT_QUIT) {
-            is_running.* = false;
+            app_state.is_running = false;
         }
     }
 }
@@ -118,14 +113,22 @@ fn renderScene(
     fb: render.FrameBuffer,
     zb: *render.ZBuffer,
     object_list: *std.ArrayList(Object),
-    world_camera: *const render.Camera,
+    world_camera: *render.Camera,
     world_lighting: *const render.WorldLighting,
 ) struct { u64, u64 } {
     fb.clear();
 
+    // Y is the polar axis (spherical coordinates)
+    const forward = math.Vec3{
+        .x = @cos(world_camera.pitch) * @sin(world_camera.yaw),
+        .y = @sin(world_camera.pitch),
+        .z = -@cos(world_camera.pitch) * @cos(world_camera.yaw),
+    };
+    const target = world_camera.position.add(forward);
+
     const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
-    const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
+    const view_matrix = math.Mat4.viewMatrix(world_camera.position, target, world_camera.up);
     const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
 
     var total_triangles: u64 = 0;
@@ -164,7 +167,13 @@ fn renderScene(
     return .{ total_triangles, drawn_triangles };
 }
 
-fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32, triangles: struct { u64, u64 }) void {
+fn renderImGui(
+    texture: *c.SDL_Texture,
+    frame_times: *[graph_samples]f32,
+    triangles: struct { u64, u64 },
+    world_camera: *render.Camera,
+    app_state: *AppState,
+) void {
     c.cImGui_ImplSDLRenderer3_NewFrame();
     c.cImGui_ImplSDL3_NewFrame();
     c.ImGui_NewFrame();
@@ -174,6 +183,10 @@ fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32, triang
     // viewport window
     // TODO: is there a better way to do the aspect ratio letterboxing without having to calculate every frame?
     if (c.ImGui_Begin("Viewport", null, 0)) {
+        if (c.ImGui_IsWindowHovered(0) and c.ImGui_IsMouseClicked(c.ImGuiMouseButton_Left)) {
+            app_state.mouse_captured = true;
+        }
+
         const avail = c.ImGui_GetContentRegionAvail();
         const tex_aspect = @as(f32, @floatFromInt(screen_width)) / @as(f32, @floatFromInt(screen_height));
         const avail_aspect = avail.x / avail.y;
@@ -201,12 +214,6 @@ fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32, triang
     }
     c.ImGui_End();
 
-    // demo window thing
-    if (c.ImGui_Begin("hello", null, 0)) {
-        c.ImGui_Text("this is a window");
-    }
-    c.ImGui_End();
-
     // Performance Metrics (FPS, etc)
     if (c.ImGui_Begin("Performance Metrics", null, 0)) {
         const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples; // Sums array and divides by amount of samples to get average
@@ -230,6 +237,14 @@ fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32, triang
     }
     c.ImGui_End();
 
+    // Input Info
+    if (c.ImGui_Begin("Input information", null, 0)) {
+        c.ImGui_Text("Input Yaw: %.2f", world_camera.yaw);
+        c.ImGui_Text("Input Pitch: %.2f", world_camera.pitch);
+        _ = c.ImGui_Checkbox("Mouse Captured", &app_state.mouse_captured);
+    }
+    c.ImGui_End();
+
     c.ImGui_Render();
 }
 
@@ -243,7 +258,11 @@ pub fn main() !void {
     const imgui_context = initImGui(sdl_context.window, sdl_context.renderer);
     defer deinitImGui(imgui_context);
 
-    var is_running: bool = true;
+    var app_state = AppState{
+        .is_running = true,
+        .mouse_captured = false,
+    };
+
     var pixels: ?*anyopaque = null;
     var pitch: c_int = 0;
 
@@ -269,9 +288,8 @@ pub fn main() !void {
     try object_list.append(allocator, teapotobj);
 
     // Scene constants
-    const world_camera = render.Camera{
+    var world_camera = render.Camera{
         .position = .{ .x = 3, .y = 2, .z = 6 },
-        .target = .{ .x = 1, .y = 1, .z = 3 }, // point at the cube
     };
 
     const light_sources = [_]render.LightSource{
@@ -291,7 +309,7 @@ pub fn main() !void {
     defer zb.deinit();
 
     // TODO: better error handling
-    while (is_running) {
+    while (app_state.is_running) {
         // Calculate performance metrics
         const current_count = c.SDL_GetPerformanceCounter(); // Get current tick count
         const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency)); // Calculate delay between frames in seconds
@@ -300,10 +318,14 @@ pub fn main() !void {
         @memmove(frame_times[0 .. graph_samples - 1], frame_times[1..graph_samples]); // Shift array contents one step to the left
         frame_times[graph_samples - 1] = delta * 1000; // Add data point at the end
 
-        // Process events
-        processEvents(&is_running);
+        // Process events & handle cursor
+        processEvents(&app_state, &world_camera);
+        const sdl_has_capture = c.SDL_GetWindowRelativeMouseMode(sdl_context.window);
+        if (app_state.mouse_captured != sdl_has_capture) {
+            _ = c.SDL_SetWindowRelativeMouseMode(sdl_context.window, app_state.mouse_captured);
+        }
 
-        // rasterize to texture
+        // Rasterize to texture
         _ = c.SDL_LockTexture(sdl_context.texture, null, &pixels, &pitch);
         const fb = render.FrameBuffer{
             .data = @ptrCast(@alignCast(pixels.?)),
@@ -315,11 +337,11 @@ pub fn main() !void {
         const triangles = renderScene(fb, &zb, &object_list, &world_camera, &world_lighting);
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
-        // present texture & draw imgui
+        // Present texture & draw imgui
         _ = c.SDL_SetRenderDrawColorFloat(sdl_context.renderer, 0, 0, 0, 1);
         _ = c.SDL_RenderClear(sdl_context.renderer);
 
-        renderImGui(sdl_context.texture, &frame_times, triangles);
+        renderImGui(sdl_context.texture, &frame_times, triangles, &world_camera, &app_state);
         c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), sdl_context.renderer);
 
         _ = c.SDL_RenderPresent(sdl_context.renderer);
