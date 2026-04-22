@@ -158,7 +158,7 @@ pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u3
     const dz_dsteps: f32 = if (steps > 0) dz / steps else 0.0;
 
     while (true) {
-        if (x0 >= 0 and y0 >= 0 and x0 <= fb.width and y0 <= fb.height) {
+        if (x0 >= 0 and y0 >= 0 and x0 < fb.width and y0 < fb.height) {
             const ux0: usize = @intCast(x0);
             const uy0: usize = @intCast(y0);
             if (zb.getDepth(ux0, uy0) > z0) {
@@ -196,43 +196,48 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer,
     fillScanlines(p1, p2, p0, p2, fb, zb, color); // a = p1 -> p2 (short), b = p0 -> p2 (long)
 }
 
-// TODO: we're drawing the middle vertex twice since both are inclusive, idk if this will cause a problem
-// TODO: handle off screen triangles so we don't waste resources
 fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
     // a is the short edge, b is the long edge
     const a_dy = a1.y - a0.y;
     const b_dy = b1.y - b0.y;
     if (a_dy == 0 or b_dy == 0) return;
 
-    var y = floatToPixel(a0.y);
+    // Clamp y to screen bounds
+    const y_start = floatToPixel(a0.y);
     const y_end = floatToPixel(a1.y);
+    var yc = @max(y_start, 0); // clamped
+    const yc_end = @min(y_end, @as(isize, @intCast(fb.height)) - 1);
 
-    while (y <= y_end) : (y += 1) {
-        const fy = @as(f32, @floatFromInt(y));
+    while (yc <= yc_end) : (yc += 1) {
+        const fy = @as(f32, @floatFromInt(yc));
         const a = Vec3.lerp(a0, a1, (fy - a0.y) / a_dy);
         const b = Vec3.lerp(b0, b1, (fy - b0.y) / b_dy);
 
         const left = if (a.x < b.x) a else b;
         const right = if (a.x < b.x) b else a;
 
-        var x = floatToPixel(left.x);
-        const x_end = floatToPixel(right.x);
-
         const dy_dx: f32 = if (right.x - left.x > 0)
             (right.z - left.z) / (right.x - left.x)
         else
             0;
 
-        var z = left.z;
+        // Clamp x to screen bounds
+        const x_start = floatToPixel(left.x);
+        const x_end = floatToPixel(right.x);
+        const xc_start = @max(x_start, 0);
+        const xc_end = @min(x_end, @as(isize, @intCast(fb.width)) - 1);
 
-        while (x <= x_end) : (x += 1) {
-            if (isInBounds(x, y, fb.width, fb.height)) {
-                const ux: usize = @intCast(x);
-                const uy: usize = @intCast(y);
-                if (zb.getDepth(ux, uy) > z) {
-                    fb.setPixel(ux, uy, color);
-                    zb.setDepth(ux, uy, z);
-                }
+        // Keep track of skipped during clamp so z is in the right pos
+        const amt_steps_skipped = @as(f32, @floatFromInt(xc_start - x_start));
+        var z = left.z + dy_dx * amt_steps_skipped;
+
+        var x = xc_start;
+        while (x <= xc_end) : (x += 1) {
+            const ux: usize = @intCast(x);
+            const uy: usize = @intCast(yc);
+            if (zb.getDepth(ux, uy) > z) {
+                fb.setPixel(ux, uy, color);
+                zb.setDepth(ux, uy, z);
             }
             z += dy_dx;
         }
@@ -267,8 +272,4 @@ pub fn multiplyRgb(color: u32, factor: f32) u32 {
 
     // 4. Shift the channels back to their positions and combine them
     return (new_r << 24) | (new_g << 16) | (new_b << 8) | a;
-}
-
-pub fn isInBounds(x: isize, y: isize, width: c_int, height: c_int) bool {
-    return (x >= 0 and y >= 0 and x <= @as(isize, @intCast(width)) and y <= @as(isize, @intCast(height)));
 }
