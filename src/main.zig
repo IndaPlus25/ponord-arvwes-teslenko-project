@@ -91,21 +91,16 @@ fn processEvents(is_running: *bool) void {
     }
 }
 
-fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.ArrayList(Object)) struct { u64, u64 } {
+fn renderScene(
+    fb: render.FrameBuffer,
+    zb: *render.ZBuffer,
+    object_list: *std.ArrayList(Object),
+    world_camera: *const render.Camera,
+    world_lighting: *const render.WorldLighting,
+) struct { u64, u64 } {
     fb.clear();
-    const world_camera = render.Camera{
-        .position = .{ .x = 3, .y = 2, .z = 6 },
-        .target = .{ .x = 1, .y = 1, .z = 3 }, // point at the cube
-    };
+
     const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
-
-    const light_sources = [_]render.LightSource{
-        .{ .SkyLight = .{ .brightness = 1 } },
-        .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
-    };
-
-    const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
-
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
     const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
@@ -250,6 +245,19 @@ pub fn main() !void {
     defer teapotobj.deinit();
     try object_list.append(allocator, teapotobj);
 
+    // Scene constants
+    const world_camera = render.Camera{
+        .position = .{ .x = 3, .y = 2, .z = 6 },
+        .target = .{ .x = 1, .y = 1, .z = 3 }, // point at the cube
+    };
+
+    const light_sources = [_]render.LightSource{
+        .{ .SkyLight = .{ .brightness = 1 } },
+        .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
+    };
+
+    const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
+
     // Performance variables
     const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
     var last_count: u64 = c.SDL_GetPerformanceCounter(); // Last time that a frame was counted
@@ -281,7 +289,7 @@ pub fn main() !void {
             .height = screen_height,
         };
         zb.clear();
-        const triangles = renderScene(fb, &zb, &object_list);
+        const triangles = renderScene(fb, &zb, &object_list, &world_camera, &world_lighting);
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
         // present texture & draw imgui
