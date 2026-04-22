@@ -23,6 +23,8 @@ const screen_width: c_int = 1920;
 const screen_height: c_int = 1080;
 const screen_title: [*c]const u8 = "working-title";
 
+const graph_samples: usize = 120; // Amount of data points to display in graphs
+
 const SdlContext = struct {
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
@@ -67,7 +69,7 @@ fn initImGui(window: *c.SDL_Window, renderer: *c.SDL_Renderer) *c.ImGuiContext {
     const context = c.ImGui_CreateContext(null).?;
     const io = c.ImGui_GetIO();
     io.*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
-    io.*.IniFilename = "config/imgui.ini";
+    io.*.IniFilename = "./src/config/imgui.ini"; // This makes the program both load and save the config automatically. TODO: Look into removing auto save of the config
     _ = c.cImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     _ = c.cImGui_ImplSDLRenderer3_Init(renderer);
     return context;
@@ -89,7 +91,7 @@ fn processEvents(is_running: *bool) void {
     }
 }
 
-fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.ArrayList(Object)) void {
+fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.ArrayList(Object)) struct { u64, u64 } {
     fb.clear();
     const world_camera = render.Camera{
         .position = .{ .x = 3, .y = 2, .z = 6 },
@@ -107,8 +109,14 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, world_camera.target, world_camera.up);
     const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
+
+    var total_triangles: u64 = 0;
+    var drawn_triangles: u64 = 0;
+
     for (object_list.*.items) |object| {
         for (object.triangles.items) |tri_v| {
+            total_triangles += 1;
+
             const c0 = vp.mulVec4(tri_v[0]);
             const c1 = vp.mulVec4(tri_v[1]);
             const c2 = vp.mulVec4(tri_v[2]);
@@ -130,11 +138,16 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
             const color2: u32 = render.multiplyRgb(color, tri_ilum);
             render.fillTriangle(v1, v2, v3, fb, zb, color2);
             // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
+
+
+            drawn_triangles += 1;
         }
     }
+
+    return .{ total_triangles, drawn_triangles };
 }
 
-fn renderImGui(texture: *c.SDL_Texture) void {
+fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32, triangles: struct { u64, u64 }) void {
     c.cImGui_ImplSDLRenderer3_NewFrame();
     c.cImGui_ImplSDL3_NewFrame();
     c.ImGui_NewFrame();
@@ -177,6 +190,29 @@ fn renderImGui(texture: *c.SDL_Texture) void {
     }
     c.ImGui_End();
 
+    // Performance Metrics (FPS, etc)
+    if (c.ImGui_Begin("Performance Metrics", null, 0)) {
+        const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples; // Sums array and divides by amount of samples to get average
+
+        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[graph_samples-1]);
+        c.ImGui_Text("Avg. FPS: %.2f", 1000.0 / avg_delay);
+
+        c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
+        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples-1]);
+        c.ImGui_Text("Avg. Frame Time: %.2f ms", avg_delay);
+
+        c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
+        c.ImGui_PlotLines("Frame Times", frame_times, graph_samples);
+    }
+    c.ImGui_End();
+
+    // Render Metrics (Triangle counts, etc)
+    if (c.ImGui_Begin("Render Metrics", null, 0)) {
+        c.ImGui_Text("Total Triangles: %d", triangles[0]);
+        c.ImGui_Text("Drawn Triangles: %d", triangles[1]);
+    }
+    c.ImGui_End();
+
     c.ImGui_Render();
 }
 
@@ -215,8 +251,22 @@ pub fn main() !void {
     defer teapotobj.deinit();
     try object_list.append(allocator, teapotobj);
 
+    // Performance variables
+    const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
+    var last_count: u64 = c.SDL_GetPerformanceCounter(); // Last time that a frame was counted
+    var frame_times: [graph_samples]f32 = undefined; // An array with all frame time data points
+
     // TODO: better error handling
     while (is_running) {
+        // Calculate performance metrics
+        const current_count = c.SDL_GetPerformanceCounter(); // Get current tick count
+        const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency));  // Calculate delay between frames in seconds
+        last_count = current_count;
+
+        @memmove(frame_times[0..graph_samples-1], frame_times[1..graph_samples]);  // Shift array contents one step to the left
+        frame_times[graph_samples - 1] = delta * 1000;  // Add data point at the end
+
+        // Process events
         processEvents(&is_running);
 
         // rasterize to texture
@@ -228,14 +278,14 @@ pub fn main() !void {
             .height = screen_height,
         };
         var zb = try render.ZBuffer.init(screen_width, screen_height);
-        renderScene(fb, &zb, &object_list);
+        const triangles = renderScene(fb, &zb, &object_list);
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
         // present texture & draw imgui
         _ = c.SDL_SetRenderDrawColorFloat(sdl_context.renderer, 0, 0, 0, 1);
         _ = c.SDL_RenderClear(sdl_context.renderer);
 
-        renderImGui(sdl_context.texture);
+        renderImGui(sdl_context.texture, &frame_times, triangles);
         c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), sdl_context.renderer);
 
         _ = c.SDL_RenderPresent(sdl_context.renderer);
