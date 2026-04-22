@@ -112,9 +112,18 @@ pub const ZBuffer = struct {
         const index = x + y * self.width;
         return self.data[index];
     }
+
     pub fn setDepth(self: ZBuffer, x: usize, y: usize, depth: f32) void {
         const index = x + y * self.width;
         self.data[index] = depth;
+    }
+
+    pub fn resize(self: *ZBuffer, new_w: usize, new_h: usize) !void {
+        if (new_w == self.width and new_h == self.height) return;
+        self.allocator.free(self.data);
+        self.data = try self.allocator.alloc(f32, new_w * new_h);
+        self.width = new_w;
+        self.height = new_h;
     }
 };
 

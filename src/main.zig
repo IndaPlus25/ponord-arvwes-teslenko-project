@@ -29,11 +29,29 @@ const SdlContext = struct {
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
     texture: *c.SDL_Texture,
+    fb_width: c_int,
+    fb_height: c_int,
 
     pub fn deinit(self: SdlContext) void {
         c.SDL_DestroyTexture(self.texture);
         c.SDL_DestroyRenderer(self.renderer);
         c.SDL_DestroyWindow(self.window);
+    }
+
+    pub fn resizeFramebuffer(self: *SdlContext, new_w: c_int, new_h: c_int) !void {
+        if (new_w == self.fb_width and new_h == self.fb_height) return;
+        c.SDL_DestroyTexture(self.texture);
+        const new_tex = c.SDL_CreateTexture(
+            self.renderer,
+            c.SDL_PIXELFORMAT_RGBA8888,
+            c.SDL_TEXTUREACCESS_STREAMING,
+            new_w,
+            new_h,
+        ) orelse return error.SdlCreateTextureFailed;
+        _ = c.SDL_SetTextureScaleMode(new_tex, c.SDL_SCALEMODE_NEAREST);
+        self.texture = new_tex;
+        self.fb_width = new_w;
+        self.fb_height = new_h;
     }
 };
 
@@ -42,10 +60,13 @@ const AppState = struct {
     mouse_captured: bool = true,
 };
 
-fn initSdl() !SdlContext {
+const ViewportSettings = struct {
+    render_scale: f32 = 0.25,
+};
+
+fn initSdl(fb_w: c_int, fb_h: c_int) !SdlContext {
     var window: ?*c.SDL_Window = null;
     var renderer: ?*c.SDL_Renderer = null;
-    var texture: ?*c.SDL_Texture = null;
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
         std.debug.print("SDL_Init failed: {s}\n", .{c.SDL_GetError()});
@@ -58,16 +79,26 @@ fn initSdl() !SdlContext {
         return error.SdlWindowCreationFailed;
     }
 
-    _ = c.SDL_SetRenderVSync(renderer.?, 1); // enable vsync
-
-    texture = c.SDL_CreateTexture(renderer, c.SDL_PIXELFORMAT_RGBA8888, c.SDL_TEXTUREACCESS_STREAMING, screen_width, screen_height);
-
-    if (texture == null) {
+    const texture = c.SDL_CreateTexture(
+        renderer,
+        c.SDL_PIXELFORMAT_RGBA8888,
+        c.SDL_TEXTUREACCESS_STREAMING,
+        fb_w,
+        fb_h,
+    ) orelse {
         std.debug.print("SDL_CreateTexture failed: {s}\n", .{c.SDL_GetError()});
         return error.SdlCreateTextureFailed;
-    }
+    };
 
-    return SdlContext{ .window = window.?, .renderer = renderer.?, .texture = texture.? };
+    _ = c.SDL_SetTextureScaleMode(texture, c.SDL_SCALEMODE_NEAREST);
+
+    return SdlContext{
+        .window = window.?,
+        .renderer = renderer.?,
+        .texture = texture,
+        .fb_width = fb_w,
+        .fb_height = fb_h,
+    };
 }
 
 fn initImGui(window: *c.SDL_Window, renderer: *c.SDL_Renderer) *c.ImGuiContext {
@@ -214,44 +245,39 @@ fn renderImGui(
     triangles: struct { u64, u64 },
     world_camera: *render.Camera,
     app_state: *AppState,
-) void {
+    viewport_settings: *ViewportSettings,
+) struct { c_int, c_int } {
     c.cImGui_ImplSDLRenderer3_NewFrame();
     c.cImGui_ImplSDL3_NewFrame();
     c.ImGui_NewFrame();
 
     _ = c.ImGui_DockSpaceOverViewport();
 
-    // viewport window
-    // TODO: is there a better way to do the aspect ratio letterboxing without having to calculate every frame?
+    var desired_w: c_int = 1;
+    var desired_h: c_int = 1;
+
+    // Viewport stuff
     if (c.ImGui_Begin("Viewport", null, 0)) {
         if (c.ImGui_IsWindowHovered(0) and c.ImGui_IsMouseClicked(c.ImGuiMouseButton_Left)) {
             app_state.mouse_captured = true;
         }
 
         const avail = c.ImGui_GetContentRegionAvail();
-        const tex_aspect = @as(f32, @floatFromInt(screen_width)) / @as(f32, @floatFromInt(screen_height));
-        const avail_aspect = avail.x / avail.y;
 
-        var img_size: c.ImVec2 = undefined;
-        if (avail_aspect > tex_aspect) {
-            img_size.y = avail.y;
-            img_size.x = avail.y * tex_aspect;
-        } else {
-            img_size.x = avail.x;
-            img_size.y = avail.x / tex_aspect;
-        }
-
-        const pad_x = (avail.x - img_size.x) * 0.5;
-        const pad_y = (avail.y - img_size.y) * 0.5;
-        if (pad_x > 0 or pad_y > 0) {
-            const pos = c.ImGui_GetCursorPos();
-            c.ImGui_SetCursorPos(.{ .x = pos.x + pad_x, .y = pos.y + pad_y });
-        }
+        desired_w = @max(1, @as(c_int, @intFromFloat(avail.x * viewport_settings.render_scale)));
+        desired_h = @max(1, @as(c_int, @intFromFloat(avail.y * viewport_settings.render_scale)));
 
         c.ImGui_Image(c.struct_ImTextureRef_t{
             ._TexData = null,
             ._TexID = @intFromPtr(texture),
-        }, img_size);
+        }, avail);
+    }
+    c.ImGui_End();
+
+    // Display settings
+    if (c.ImGui_Begin("Display Settings", null, 0)) {
+        _ = c.ImGui_SliderFloat("Render Scale", &viewport_settings.render_scale, 0.1, 1.0);
+        c.ImGui_Text("Framebuffer: %d x %d", desired_w, desired_h);
     }
     c.ImGui_End();
 
@@ -287,12 +313,17 @@ fn renderImGui(
     c.ImGui_End();
 
     c.ImGui_Render();
+
+    return .{ desired_w, desired_h };
 }
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator; // TODO Maybe move into a global variable, and look into using a more efficient allocator for our intents and purposes
 
-    const sdl_context = try initSdl();
+    var viewport_settings = ViewportSettings{};
+    const initial_fb_w: c_int = 640;
+    const initial_fb_h: c_int = 480;
+    var sdl_context = try initSdl(initial_fb_w, initial_fb_h);
     defer c.SDL_Quit();
     defer sdl_context.deinit();
 
@@ -346,8 +377,11 @@ pub fn main() !void {
     var frame_times: [graph_samples]f32 = undefined; // An array with all frame time data points
 
     // Init zbuffer
-    var zb = try render.ZBuffer.init(screen_width, screen_height);
+    var zb = try render.ZBuffer.init(initial_fb_w, initial_fb_h);
     defer zb.deinit();
+
+    var desired_fb_w: c_int = initial_fb_w;
+    var desired_fb_h: c_int = initial_fb_h;
 
     // TODO: better error handling
     while (app_state.is_running) {
@@ -371,13 +405,17 @@ pub fn main() !void {
             updateMovement(&world_camera, delta);
         }
 
+        // Resize framebuffer/zbuffer if window size changed
+        try sdl_context.resizeFramebuffer(desired_fb_w, desired_fb_h);
+        try zb.resize(@intCast(desired_fb_w), @intCast(desired_fb_h));
+
         // Rasterize to texture
         _ = c.SDL_LockTexture(sdl_context.texture, null, &pixels, &pitch);
         const fb = render.FrameBuffer{
             .data = @ptrCast(@alignCast(pixels.?)),
             .stride = @divExact(@as(usize, @intCast(pitch)), 4),
-            .width = screen_width,
-            .height = screen_height,
+            .width = sdl_context.fb_width,
+            .height = sdl_context.fb_height,
         };
         zb.clear();
         const triangles = renderScene(fb, &zb, &object_list, &world_camera, &world_lighting);
@@ -387,7 +425,11 @@ pub fn main() !void {
         _ = c.SDL_SetRenderDrawColorFloat(sdl_context.renderer, 0, 0, 0, 1);
         _ = c.SDL_RenderClear(sdl_context.renderer);
 
-        renderImGui(sdl_context.texture, &frame_times, triangles, &world_camera, &app_state);
+        // renderImGui returns desired size for the NEXT frame
+        const new_size = renderImGui(sdl_context.texture, &frame_times, triangles, &world_camera, &app_state, &viewport_settings);
+        desired_fb_w = new_size[0];
+        desired_fb_h = new_size[1];
+
         c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), sdl_context.renderer);
 
         _ = c.SDL_RenderPresent(sdl_context.renderer);
