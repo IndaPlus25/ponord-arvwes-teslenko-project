@@ -139,7 +139,6 @@ fn renderScene(fb: render.FrameBuffer, zb: *render.ZBuffer, object_list: *std.Ar
             render.fillTriangle(v1, v2, v3, fb, zb, color2);
             // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
 
-
             drawn_triangles += 1;
         }
     }
@@ -194,11 +193,11 @@ fn renderImGui(texture: *c.SDL_Texture, frame_times: *[graph_samples]f32, triang
     if (c.ImGui_Begin("Performance Metrics", null, 0)) {
         const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples; // Sums array and divides by amount of samples to get average
 
-        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[graph_samples-1]);
+        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[graph_samples - 1]);
         c.ImGui_Text("Avg. FPS: %.2f", 1000.0 / avg_delay);
 
         c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
-        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples-1]);
+        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples - 1]);
         c.ImGui_Text("Avg. Frame Time: %.2f ms", avg_delay);
 
         c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
@@ -256,15 +255,19 @@ pub fn main() !void {
     var last_count: u64 = c.SDL_GetPerformanceCounter(); // Last time that a frame was counted
     var frame_times: [graph_samples]f32 = undefined; // An array with all frame time data points
 
+    // Init zbuffer
+    var zb = try render.ZBuffer.init(screen_width, screen_height);
+    defer zb.deinit();
+
     // TODO: better error handling
     while (is_running) {
         // Calculate performance metrics
         const current_count = c.SDL_GetPerformanceCounter(); // Get current tick count
-        const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency));  // Calculate delay between frames in seconds
+        const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency)); // Calculate delay between frames in seconds
         last_count = current_count;
 
-        @memmove(frame_times[0..graph_samples-1], frame_times[1..graph_samples]);  // Shift array contents one step to the left
-        frame_times[graph_samples - 1] = delta * 1000;  // Add data point at the end
+        @memmove(frame_times[0 .. graph_samples - 1], frame_times[1..graph_samples]); // Shift array contents one step to the left
+        frame_times[graph_samples - 1] = delta * 1000; // Add data point at the end
 
         // Process events
         processEvents(&is_running);
@@ -277,7 +280,7 @@ pub fn main() !void {
             .width = screen_width,
             .height = screen_height,
         };
-        var zb = try render.ZBuffer.init(screen_width, screen_height);
+        zb.clear();
         const triangles = renderScene(fb, &zb, &object_list);
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
