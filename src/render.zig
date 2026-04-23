@@ -12,7 +12,7 @@ pub const Camera = struct {
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
     fov: f32 = 60, // field of view in degrees
     near: f32 = 0.001, // distance to near plane
-    far: f32 = 10.0, // distance to far plane
+    far: f32 = 100.0, // distance to far plane
 };
 
 pub const WorldLighting = struct {

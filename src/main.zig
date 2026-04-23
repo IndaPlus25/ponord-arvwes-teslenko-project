@@ -206,7 +206,8 @@ fn renderScene(
     var drawn_triangles: u64 = 0;
 
     for (object_list.*.items) |object| {
-        for (object.triangles.items) |tri_v| {
+        // TEMP: capture tri_index for random colors, remove this when adding textures
+        for (object.triangles.items, 0..) |tri_v, tri_index| {
             total_triangles += 1;
             const c0 = vp.mulVec4(tri_v[0]);
             const c1 = vp.mulVec4(tri_v[1]);
@@ -217,18 +218,22 @@ fn renderScene(
             const p0 = tri_v[0].toVec3();
             const p1 = tri_v[1].toVec3();
             const p2 = tri_v[2].toVec3();
-
             const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
 
             const v1 = c0.toPixel(fb.width, fb.height);
             const v2 = c1.toPixel(fb.width, fb.height);
             const v3 = c2.toPixel(fb.width, fb.height);
-
             if (render.facingAway(v1, v2, v3)) continue;
-            const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
-            const color2: u32 = render.multiplyRgb(color, tri_ilum);
-            render.fillTriangle(v1, v2, v3, fb, zb, color2);
-            // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
+
+            // TEMP: random colors for triangles for debugging
+            const idx = @as(u32, @truncate(tri_index));
+            const r: u32 = (idx *% 2654435761) & 0xFF;
+            const g: u32 = ((idx *% 2654435761) >> 8) & 0xFF;
+            const b: u32 = ((idx *% 2654435761) >> 16) & 0xFF;
+            const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
+
+            const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
+            render.fillTriangle(v1, v2, v3, fb, zb, final_color);
 
             drawn_triangles += 1;
         }
@@ -292,6 +297,10 @@ fn renderImGui(
             _ = c.ImGui_InputFloat("FOV", &world_camera.fov);
             _ = c.ImGui_InputFloat("Near Plane", &world_camera.near);
             _ = c.ImGui_InputFloat("Far Plane", &world_camera.far);
+        }
+
+        if (c.ImGui_CollapsingHeader("Post Processing", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("Render Scale", &viewport_settings.render_scale);
         }
     }
     c.ImGui_End();
