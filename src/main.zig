@@ -338,7 +338,7 @@ pub fn main() !void {
     var pitch: c_int = 0;
 
     // Load models
-    var kokiri_model = try objects.loadModel("models/kokiri.obj", &allocator);
+    var kokiri_model = try objects.loadModel("models/Kokiri Forest/Kokiri Forest.obj", &allocator);
     defer kokiri_model.deinit();
 
     // Prepare objects
