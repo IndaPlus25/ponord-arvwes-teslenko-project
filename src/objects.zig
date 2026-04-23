@@ -96,7 +96,7 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
     while (file_reader.interface.takeDelimiterInclusive('\n')) |str| {
 
         // Tokenize line by whitespace and linebreaks
-        var iter = std.mem.tokenizeAny(u8, str, " \n");
+        var iter = std.mem.tokenizeAny(u8, str, " \n\r\t");
 
         // Check for line type and parse accordingly
         const nxt = iter.next();
@@ -112,18 +112,18 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
             });
         } else if (std.mem.eql(u8, key, "f")) { // Parse for faces
             // The first element in the sequence
-            var anchor_s = std.mem.splitSequence(u8, iter.next().?, "\\\\"); // Split it up by "\\"
+            var anchor_s = std.mem.splitSequence(u8, iter.next().?, "/"); // Split it up by "\\"
             const anchor_v = try std.fmt.parseInt(u32, anchor_s.next().?, 10); // Get the vertex data
             // const anchor_n = try std.fmt.parseInt(u32, anchor_s.next().?, 10);
             // ^ Incomplete example of how you would get face normal data if we were to use it
             // When/If we start using it, uncomment and figure out how to also handle cases where it isn't provided
 
             // The element previous to iter.next()
-            var prev_s = std.mem.splitSequence(u8, iter.next().?, "\\\\");
+            var prev_s = std.mem.splitSequence(u8, iter.next().?, "/");
             var prev_v = try std.fmt.parseInt(u32, prev_s.next().?, 10);
 
             while (iter.next()) |entry| {
-                var curr_s = std.mem.splitSequence(u8, entry, "\\\\");
+                var curr_s = std.mem.splitSequence(u8, entry, "/");
                 const curr_v = try std.fmt.parseInt(u32, curr_s.next().?, 10);
 
                 try faces.append(allocator.*, .{
