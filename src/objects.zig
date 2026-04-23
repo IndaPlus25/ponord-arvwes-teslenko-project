@@ -8,6 +8,7 @@ pub const Object = struct {
     z: f32,
 
     triangles: std.ArrayList([3]math.Vec4),
+    triangle_uvs: std.ArrayList([3][2]f32),
     allocator: *const std.mem.Allocator,
 
     pub fn init(model: Model, allocator: *const std.mem.Allocator) !Object {
@@ -16,12 +17,14 @@ pub const Object = struct {
             .y = 0,
             .z = 0,
             .triangles = try model.triangles.clone(allocator.*),
+            .triangle_uvs = try model.triangle_uvs.clone(allocator.*),
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Object) void {
         self.triangles.deinit(self.allocator.*);
+        self.triangle_uvs.deinit(self.allocator.*);
     }
 
     // Move object by a vector
@@ -69,10 +72,12 @@ pub const Object = struct {
 // A loaded 3D model
 pub const Model = struct {
     triangles: std.ArrayList([3]math.Vec4),
+    triangle_uvs: std.ArrayList([3][2]f32),
     allocator: *const std.mem.Allocator,
 
     pub fn deinit(self: *Model) void {
         self.triangles.deinit(self.allocator.*);
+        self.triangle_uvs.deinit(self.allocator.*);
     }
 };
 
@@ -80,8 +85,11 @@ pub const Model = struct {
 pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Model {
     // Create arrays
     var vertexes: std.ArrayList(math.Vec4) = .empty;
+    var uvs: std.ArrayList([2]f32) = .empty;
     var faces: std.ArrayList([3]math.Vec4) = .empty;
+    var face_uvs: std.ArrayList([3][2]f32) = .empty;
     defer vertexes.deinit(allocator.*);
+    defer uvs.deinit(allocator.*);
 
     // Get file reader
     var line_buf: [64]u8 = undefined;
@@ -112,19 +120,19 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
             });
         } else if (std.mem.eql(u8, key, "f")) { // Parse for faces
             // The first element in the sequence
-            var anchor_s = std.mem.splitSequence(u8, iter.next().?, "/"); // Split it up by "\\"
+            var anchor_s = std.mem.splitSequence(u8, iter.next().?, "/"); // Split it up by "/"
             const anchor_v = try std.fmt.parseInt(u32, anchor_s.next().?, 10); // Get the vertex data
-            // const anchor_n = try std.fmt.parseInt(u32, anchor_s.next().?, 10);
-            // ^ Incomplete example of how you would get face normal data if we were to use it
-            // When/If we start using it, uncomment and figure out how to also handle cases where it isn't provided
+            const anchor_uv = try std.fmt.parseInt(u32, anchor_s.next().?, 10);
 
             // The element previous to iter.next()
             var prev_s = std.mem.splitSequence(u8, iter.next().?, "/");
             var prev_v = try std.fmt.parseInt(u32, prev_s.next().?, 10);
+            var prev_uv = try std.fmt.parseInt(u32, prev_s.next().?, 10);
 
             while (iter.next()) |entry| {
                 var curr_s = std.mem.splitSequence(u8, entry, "/");
                 const curr_v = try std.fmt.parseInt(u32, curr_s.next().?, 10);
+                const curr_uv = try std.fmt.parseInt(u32, curr_s.next().?, 10);
 
                 try faces.append(allocator.*, .{
                     vertexes.items[anchor_v - 1],
@@ -132,14 +140,22 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
                     vertexes.items[curr_v - 1],
                 });
 
+                try face_uvs.append(allocator.*, .{
+                    uvs.items[anchor_uv - 1],
+                    uvs.items[prev_uv - 1],
+                    uvs.items[curr_uv - 1],
+                });
+
                 prev_v = curr_v;
+                prev_uv = curr_uv;
             }
         } else if (std.mem.eql(u8, key, "vn")) { // Parse for normals
             // TODO Implement if we start using vertex normals
 
         } else if (std.mem.eql(u8, key, "vt")) { // Parse for textures
-            // TODO Implement if we start using texture coordinates
-
+            const u = try std.fmt.parseFloat(f32, iter.next().?);
+            const v = try std.fmt.parseFloat(f32, iter.next().?);
+            try uvs.append(allocator.*, .{ u, v });
         }
     } else |err| if (err != error.EndOfStream) {
         return err;
@@ -148,6 +164,7 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
     // Return a model
     return Model{
         .triangles = faces,
+        .triangle_uvs = face_uvs,
         .allocator = allocator,
     };
 }
