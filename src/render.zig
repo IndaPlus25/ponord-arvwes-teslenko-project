@@ -182,73 +182,58 @@ pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u3
     }
 }
 
-pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
-    var p0 = v1;
-    var p1 = v2;
-    var p2 = v3;
-    if (p0.y > p1.y) std.mem.swap(Vec3, &p0, &p1);
-    if (p1.y > p2.y) std.mem.swap(Vec3, &p1, &p2);
-    if (p0.y > p1.y) std.mem.swap(Vec3, &p0, &p1);
-
-    if (p0.y == p2.y) return; // not a triangle
-
-    fillScanlines(p0, p1, p0, p2, fb, zb, color); // a = p0 -> p1 (short), b = p0 -> p2 (long)
-    fillScanlines(p1, p2, p0, p2, fb, zb, color); // a = p1 -> p2 (short), b = p0 -> p2 (long)
+fn edgeFunction(a: Vec3, b: Vec3, c: Vec3) f32 {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
-fn fillScanlines(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
-    // a is the short edge, b is the long edge
-    const a_dy = a1.y - a0.y;
-    const b_dy = b1.y - b0.y;
-    if (a_dy == 0 or b_dy == 0) return;
+// https://github.com/ssloy/tinyrenderer/wiki/Lesson-2:-Triangle-rasterization-and-back-face-culling
+// https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/perspective-correct-interpolation-vertex-attributes.html
+// https://fgiesen.wordpress.com/2013/02/08/triangle-rasterization-in-practice/
 
-    // Clamp y to screen bounds
-    const y_start = floatToPixel(a0.y);
-    const y_end = floatToPixel(a1.y);
-    var yc = @max(y_start, 0); // clamped
-    const yc_end = @min(y_end, @as(isize, @intCast(fb.height)) - 1);
+pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
+    const min_x_f = @min(v1.x, @min(v2.x, v3.x));
+    const min_y_f = @min(v1.y, @min(v2.y, v3.y));
+    const max_x_f = @max(v1.x, @max(v2.x, v3.x));
+    const max_y_f = @max(v1.y, @max(v2.y, v3.y));
 
-    while (yc <= yc_end) : (yc += 1) {
-        const fy = @as(f32, @floatFromInt(yc));
-        const a = Vec3.lerp(a0, a1, (fy - a0.y) / a_dy);
-        const b = Vec3.lerp(b0, b1, (fy - b0.y) / b_dy);
+    var min_x: isize = @intFromFloat(@floor(min_x_f));
+    var min_y: isize = @intFromFloat(@floor(min_y_f));
+    var max_x: isize = @intFromFloat(@ceil(max_x_f));
+    var max_y: isize = @intFromFloat(@ceil(max_y_f));
 
-        const left = if (a.x < b.x) a else b;
-        const right = if (a.x < b.x) b else a;
+    min_x = @max(min_x, 0);
+    min_y = @max(min_y, 0);
+    max_x = @min(max_x, @as(isize, @intCast(fb.width)) - 1);
+    max_y = @min(max_y, @as(isize, @intCast(fb.height)) - 1);
 
-        const dy_dx: f32 = if (right.x - left.x > 0)
-            (right.z - left.z) / (right.x - left.x)
-        else
-            0;
+    const tri_area = edgeFunction(v1, v2, v3);
+    if (tri_area == 0) return; // not a triangle
 
-        // Clamp x to screen bounds
-        const x_start = floatToPixel(left.x);
-        const x_end = floatToPixel(right.x);
-        const xc_start = @max(x_start, 0);
-        const xc_end = @min(x_end, @as(isize, @intCast(fb.width)) - 1);
+    var py: isize = min_y;
+    while (py <= max_y) : (py += 1) {
+        var px: isize = min_x;
+        while (px <= max_x) : (px += 1) {
+            // Edge function disregards z
+            const p = Vec3{ .x = @floatFromInt(px), .y = @floatFromInt(py), .z = 0 };
 
-        // Keep track of skipped during clamp so z is in the right pos
-        const amt_steps_skipped = @as(f32, @floatFromInt(xc_start - x_start));
-        var z = left.z + dy_dx * amt_steps_skipped;
+            const w0 = edgeFunction(v2, v3, p);
+            const w1 = edgeFunction(v3, v1, p);
+            const w2 = edgeFunction(v1, v2, p);
 
-        var x = xc_start;
-        while (x <= xc_end) : (x += 1) {
-            const ux: usize = @intCast(x);
-            const uy: usize = @intCast(yc);
-            if (zb.getDepth(ux, uy) > z) {
-                fb.setPixel(ux, uy, color);
-                zb.setDepth(ux, uy, z);
+            // Check if the point p is on or inside the edges of the triangle
+            // We multiply by area to fix CCW since our toPixel function flips y in screen space
+            if (w0 * tri_area >= 0 and w1 * tri_area >= 0 and w2 * tri_area >= 0) {
+                // Perspective correct z
+                const z = tri_area / (w0 / v1.z + w1 / v2.z + w2 / v3.z);
+                const ux: usize = @intCast(px);
+                const uy: usize = @intCast(py);
+                if (zb.getDepth(ux, uy) > z) {
+                    fb.setPixel(ux, uy, color);
+                    zb.setDepth(ux, uy, z);
+                }
             }
-            z += dy_dx;
         }
     }
-}
-
-// Is the triangle facing away from us?
-pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
-    const edge1 = v2.sub(v1);
-    const edge2 = v3.sub(v1);
-    return edge1.cross(edge2).z >= 0;
 }
 
 pub fn multiplyRgb(color: u32, factor: f32) u32 {

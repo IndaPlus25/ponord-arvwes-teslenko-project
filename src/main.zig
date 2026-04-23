@@ -226,7 +226,6 @@ fn renderScene(
             const v2 = c1.toPixel(fb.width, fb.height);
             const v3 = c2.toPixel(fb.width, fb.height);
 
-            if (render.facingAway(v1, v2, v3)) continue;
             const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
             const color2: u32 = render.multiplyRgb(color, tri_ilum);
             render.fillTriangle(v1, v2, v3, fb, zb, color2);
