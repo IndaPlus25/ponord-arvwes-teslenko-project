@@ -189,7 +189,6 @@ fn edgeFunction(a: Vec3, b: Vec3, c: Vec3) f32 {
 // https://github.com/ssloy/tinyrenderer/wiki/Lesson-2:-Triangle-rasterization-and-back-face-culling
 // https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/perspective-correct-interpolation-vertex-attributes.html
 // https://fgiesen.wordpress.com/2013/02/08/triangle-rasterization-in-practice/
-
 pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
     const min_x_f = @min(v1.x, @min(v2.x, v3.x));
     const min_y_f = @min(v1.y, @min(v2.y, v3.y));
@@ -209,22 +208,37 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer,
     const tri_area = edgeFunction(v1, v2, v3);
     if (tri_area == 0) return; // not a triangle
 
+    // Optimization by precalculating a bunch of stuff
+    const inv_area = 1.0 / tri_area;
+    const inv_z1 = 1.0 / v1.z;
+    const inv_z2 = 1.0 / v2.z;
+    const inv_z3 = 1.0 / v3.z;
+
+    const dw0_dx = v2.y - v3.y;
+    const dw0_dy = v3.x - v2.x;
+    const dw1_dx = v3.y - v1.y;
+    const dw1_dy = v1.x - v3.x;
+    const dw2_dx = v1.y - v2.y;
+    const dw2_dy = v2.x - v1.x;
+
+    const start = Vec3{ .x = @floatFromInt(min_x), .y = @floatFromInt(min_y), .z = 0 };
+    var w0_row = edgeFunction(v2, v3, start);
+    var w1_row = edgeFunction(v3, v1, start);
+    var w2_row = edgeFunction(v1, v2, start);
+
     var py: isize = min_y;
     while (py <= max_y) : (py += 1) {
+        var w0 = w0_row;
+        var w1 = w1_row;
+        var w2 = w2_row;
+
         var px: isize = min_x;
         while (px <= max_x) : (px += 1) {
-            // Edge function disregards z
-            const p = Vec3{ .x = @floatFromInt(px), .y = @floatFromInt(py), .z = 0 };
-
-            const w0 = edgeFunction(v2, v3, p);
-            const w1 = edgeFunction(v3, v1, p);
-            const w2 = edgeFunction(v1, v2, p);
-
             // Check if the point p is on or inside the edges of the triangle
             // We multiply by area to fix CCW since our toPixel function flips y in screen space
             if (w0 * tri_area >= 0 and w1 * tri_area >= 0 and w2 * tri_area >= 0) {
                 // Perspective correct z
-                const z = tri_area / (w0 / v1.z + w1 / v2.z + w2 / v3.z);
+                const z = 1.0 / ((w0 * inv_z1 + w1 * inv_z2 + w2 * inv_z3) * inv_area);
                 const ux: usize = @intCast(px);
                 const uy: usize = @intCast(py);
                 if (zb.getDepth(ux, uy) > z) {
@@ -232,8 +246,20 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer,
                     zb.setDepth(ux, uy, z);
                 }
             }
+            w0 += dw0_dx;
+            w1 += dw1_dx;
+            w2 += dw2_dx;
         }
+        w0_row += dw0_dy;
+        w1_row += dw1_dy;
+        w2_row += dw2_dy;
     }
+}
+
+pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
+    const edge1 = v2.sub(v1);
+    const edge2 = v3.sub(v1);
+    return edge1.cross(edge2).z >= 0;
 }
 
 pub fn multiplyRgb(color: u32, factor: f32) u32 {

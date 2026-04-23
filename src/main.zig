@@ -209,7 +209,6 @@ fn renderScene(
     for (object_list.*.items) |object| {
         for (object.triangles.items) |tri_v| {
             total_triangles += 1;
-
             const c0 = vp.mulVec4(tri_v[0]);
             const c1 = vp.mulVec4(tri_v[1]);
             const c2 = vp.mulVec4(tri_v[2]);
@@ -224,8 +223,9 @@ fn renderScene(
 
             const v1 = c0.toPixel(fb.width, fb.height);
             const v2 = c1.toPixel(fb.width, fb.height);
-            const v3 = c2.toPixel(fb.width, fb.height);
+        object.moveTo(x: f32, y: f32, z: f32)            const v3 = c2.toPixel(fb.width, fb.height);
 
+            if (render.facingAway(v1, v2, v3)) continue;
             const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
             const color2: u32 = render.multiplyRgb(color, tri_ilum);
             render.fillTriangle(v1, v2, v3, fb, zb, color2);
