@@ -362,6 +362,18 @@ pub fn main() !void {
 
     const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
 
+    // Scene constants
+    var world_camera = render.Camera{
+        .position = .{ .x = 3, .y = 2, .z = 6 },
+    };
+
+    const light_sources = [_]render.LightSource{
+        .{ .SkyLight = .{ .brightness = 1 } },
+        .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
+    };
+
+    const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
+
     // Performance variables
     const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
     var last_count: u64 = c.SDL_GetPerformanceCounter(); // Last time that a frame was counted
