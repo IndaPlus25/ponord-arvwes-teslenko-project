@@ -361,9 +361,9 @@ pub fn main() !void {
     // Scale down the world
     for (kokiri_model.triangles.items) |*tri| {
         for (0..3) |i| {
-            tri[i].x *= 0.008;
-            tri[i].y *= 0.008;
-            tri[i].z *= 0.008;
+            tri[i].x *= 0.01;
+            tri[i].y *= 0.01;
+            tri[i].z *= 0.01;
         }
     }
     defer kokiri_model.deinit();
