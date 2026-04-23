@@ -168,7 +168,7 @@ fn updateMovement(world_camera: *render.Camera, delta: f32) void {
     if (keys[c.SDL_SCANCODE_A]) velocity = velocity.sub(move_right);
 
     // Normalize horizontal movement so W+D isn't sqr(2) faster
-    const speed: f32 = 10.0;
+    const speed: f32 = 400.0;
     if (velocity.len() > 0.0) {
         velocity = velocity.norm();
     }
@@ -223,7 +223,7 @@ fn renderScene(
 
             const v1 = c0.toPixel(fb.width, fb.height);
             const v2 = c1.toPixel(fb.width, fb.height);
-        object.moveTo(x: f32, y: f32, z: f32)            const v3 = c2.toPixel(fb.width, fb.height);
+            const v3 = c2.toPixel(fb.width, fb.height);
 
             if (render.facingAway(v1, v2, v3)) continue;
             const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
@@ -338,25 +338,17 @@ pub fn main() !void {
     var pitch: c_int = 0;
 
     // Load models
-    var cow_model = try objects.loadModel("models/cow.obj", &allocator);
-    defer cow_model.deinit();
-
-    var teapot_model = try objects.loadModel("models/teapot.obj", &allocator);
-    defer teapot_model.deinit();
+    var kokiri_model = try objects.loadModel("models/kokiri.obj", &allocator);
+    defer kokiri_model.deinit();
 
     // Prepare objects
     var object_list: std.ArrayList(Object) = .empty;
     defer object_list.deinit(allocator);
 
-    var cow_obj = try Object.init(cow_model, &allocator);
-    cow_obj.moveTo(-4, 2, -1); //
-    defer cow_obj.deinit();
-    try object_list.append(allocator, cow_obj);
-
-    var teapotobj = try Object.init(teapot_model, &allocator);
-    teapotobj.moveTo(-2, 0, -5);
-    defer teapotobj.deinit();
-    try object_list.append(allocator, teapotobj);
+    var kokiri_obj = try Object.init(kokiri_model, &allocator);
+    kokiri_obj.moveTo(-4, 2, -1);
+    defer kokiri_obj.deinit();
+    try object_list.append(allocator, kokiri_obj);
 
     // Scene constants
     var world_camera = render.Camera{

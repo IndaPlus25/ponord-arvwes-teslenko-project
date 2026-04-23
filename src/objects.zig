@@ -86,7 +86,7 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
     // Get file reader
     var line_buf: [64]u8 = undefined;
     var file: std.fs.File = try std.fs.cwd().openFile(
-        file_path, 
+        file_path,
         .{ .mode = .read_only },
     );
     defer file.close();
@@ -97,25 +97,24 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
 
         // Tokenize line by whitespace and linebreaks
         var iter = std.mem.tokenizeAny(u8, str, " \n");
-        
+
         // Check for line type and parse accordingly
         const nxt = iter.next();
-        if (nxt == null) continue;  // Means that we have a blank line
+        if (nxt == null) continue; // Means that we have a blank line
         const key = nxt.?;
-        
-        if (std.mem.eql(u8, key, "v")) {  // Parse for vertexes
+
+        if (std.mem.eql(u8, key, "v")) { // Parse for vertexes
             try vertexes.append(allocator.*, .{
                 .x = try std.fmt.parseFloat(f32, iter.next().?),
                 .y = try std.fmt.parseFloat(f32, iter.next().?),
                 .z = try std.fmt.parseFloat(f32, iter.next().?),
                 .w = 1,
             });
-
-        } else if (std.mem.eql(u8, key, "f")) {  // Parse for faces
+        } else if (std.mem.eql(u8, key, "f")) { // Parse for faces
             // The first element in the sequence
-            var anchor_s = std.mem.splitSequence(u8, iter.next().?, "\\\\");  // Split it up by "\\" 
-            const anchor_v = try std.fmt.parseInt(u32, anchor_s.next().?, 10);  // Get the vertex data
-            // const anchor_n = try std.fmt.parseInt(u32, anchor_s.next().?, 10);  
+            var anchor_s = std.mem.splitSequence(u8, iter.next().?, "\\\\"); // Split it up by "\\"
+            const anchor_v = try std.fmt.parseInt(u32, anchor_s.next().?, 10); // Get the vertex data
+            // const anchor_n = try std.fmt.parseInt(u32, anchor_s.next().?, 10);
             // ^ Incomplete example of how you would get face normal data if we were to use it
             // When/If we start using it, uncomment and figure out how to also handle cases where it isn't provided
 
@@ -135,11 +134,10 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
 
                 prev_v = curr_v;
             }
-
-        } else if (std.mem.eql(u8, key, "vn")) {  // Parse for normals
+        } else if (std.mem.eql(u8, key, "vn")) { // Parse for normals
             // TODO Implement if we start using vertex normals
 
-        } else if (std.mem.eql(u8, key, "vt")) {  // Parse for textures
+        } else if (std.mem.eql(u8, key, "vt")) { // Parse for textures
             // TODO Implement if we start using texture coordinates
 
         }
@@ -148,7 +146,7 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
     }
 
     // Return a model
-    return Model{ 
+    return Model{
         .triangles = faces,
         .allocator = allocator,
     };

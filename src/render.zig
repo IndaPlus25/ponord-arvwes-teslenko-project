@@ -9,9 +9,9 @@ pub const Camera = struct {
     pitch: f32 = 0, // rotation around the camera right axis (up/down) in radians
     sensitivity: f32 = 0.002, // mouse sensitivity
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
-    fov: f32 = 80, // field of view in degrees
+    fov: f32 = 60, // field of view in degrees
     near: f32 = 0.1, // distance to near plane
-    far: f32 = 1000.0, // distance to far plane
+    far: f32 = 20000.0, // distance to far plane
 };
 
 pub const WorldLighting = struct {
