@@ -168,7 +168,6 @@ fn updateMovement(world_camera: *render.Camera, delta: f32) void {
     if (keys[c.SDL_SCANCODE_A]) velocity = velocity.sub(move_right);
 
     // Normalize horizontal movement so W+D isn't sqr(2) faster
-    const speed: f32 = 400.0;
     if (velocity.len() > 0.0) {
         velocity = velocity.norm();
     }
@@ -178,7 +177,7 @@ fn updateMovement(world_camera: *render.Camera, delta: f32) void {
     if (keys[c.SDL_SCANCODE_LSHIFT]) velocity.y -= 1;
 
     // Apply movement
-    world_camera.position = world_camera.position.add(velocity.mul(speed * delta));
+    world_camera.position = world_camera.position.add(velocity.mul(world_camera.move_speed * delta));
 }
 
 fn renderScene(
@@ -262,7 +261,6 @@ fn renderImGui(
         }
 
         const avail = c.ImGui_GetContentRegionAvail();
-
         desired_w = @max(1, @as(c_int, @intFromFloat(avail.x * viewport_settings.render_scale)));
         desired_h = @max(1, @as(c_int, @intFromFloat(avail.y * viewport_settings.render_scale)));
 
@@ -273,40 +271,61 @@ fn renderImGui(
     }
     c.ImGui_End();
 
-    // Display settings
-    if (c.ImGui_Begin("Display Settings", null, 0)) {
-        _ = c.ImGui_SliderFloat("Render Scale", &viewport_settings.render_scale, 0.1, 1.0);
-        c.ImGui_Text("Framebuffer: %d x %d", desired_w, desired_h);
+    if (c.ImGui_Begin("Camera Settings", null, 0)) {
+        if (c.ImGui_CollapsingHeader("Position", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("X", &world_camera.position.x);
+            _ = c.ImGui_InputFloat("Y", &world_camera.position.y);
+            _ = c.ImGui_InputFloat("Z", &world_camera.position.z);
+        }
+
+        if (c.ImGui_CollapsingHeader("Rotation", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("Yaw", &world_camera.yaw);
+            _ = c.ImGui_InputFloat("Pitch", &world_camera.pitch);
+        }
+
+        if (c.ImGui_CollapsingHeader("Movement", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("Move Speed", &world_camera.move_speed);
+            _ = c.ImGui_InputFloat("Sensitivity", &world_camera.sensitivity);
+        }
+
+        if (c.ImGui_CollapsingHeader("Projection", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("FOV", &world_camera.fov);
+            _ = c.ImGui_InputFloat("Near Plane", &world_camera.near);
+            _ = c.ImGui_InputFloat("Far Plane", &world_camera.far);
+        }
     }
     c.ImGui_End();
 
-    // Performance Metrics (FPS, etc)
     if (c.ImGui_Begin("Performance Metrics", null, 0)) {
-        const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples; // Sums array and divides by amount of samples to get average
+        const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples;
+        const fps = 1000.0 / avg_delay;
 
-        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[graph_samples - 1]);
-        c.ImGui_Text("Avg. FPS: %.2f", 1000.0 / avg_delay);
-
-        c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
+        c.ImGui_Text("FPS: %.1f", fps);
         c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples - 1]);
-        c.ImGui_Text("Avg. Frame Time: %.2f ms", avg_delay);
 
-        c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
+        c.ImGui_Separator();
+
+        var frame_counter: u32 = 0;
+        frame_counter += 1;
+        if (frame_counter >= 4) {
+            frame_counter = 0;
+        }
+
         c.ImGui_PlotLines("Frame Times", frame_times, graph_samples);
+
+        c.ImGui_Text("Avg Frame Time: %.2f ms", avg_delay);
     }
     c.ImGui_End();
 
-    // Render Metrics (Triangle counts, etc)
     if (c.ImGui_Begin("Render Metrics", null, 0)) {
-        c.ImGui_Text("Total Triangles: %d", triangles[0]);
-        c.ImGui_Text("Drawn Triangles: %d", triangles[1]);
+        c.ImGui_Text("Total Triangles: %llu", triangles[0]);
+        c.ImGui_Text("Drawn Triangles: %llu", triangles[1]);
     }
     c.ImGui_End();
 
-    // Input Info
-    if (c.ImGui_Begin("Input information", null, 0)) {
-        c.ImGui_Text("Input Yaw: %.2f", world_camera.yaw);
-        c.ImGui_Text("Input Pitch: %.2f", world_camera.pitch);
+    if (c.ImGui_Begin("Input Information", null, 0)) {
+        c.ImGui_Text("Yaw:   %.2f", world_camera.yaw);
+        c.ImGui_Text("Pitch: %.2f", world_camera.pitch);
         _ = c.ImGui_Checkbox("Mouse Captured", &app_state.mouse_captured);
     }
     c.ImGui_End();
@@ -339,6 +358,14 @@ pub fn main() !void {
 
     // Load models
     var kokiri_model = try objects.loadModel("models/Kokiri Forest/Kokiri Forest.obj", &allocator);
+    // Scale down the world
+    for (kokiri_model.triangles.items) |*tri| {
+        for (0..3) |i| {
+            tri[i].x *= 0.008;
+            tri[i].y *= 0.008;
+            tri[i].z *= 0.008;
+        }
+    }
     defer kokiri_model.deinit();
 
     // Prepare objects

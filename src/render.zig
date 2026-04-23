@@ -5,13 +5,18 @@ const Vec4 = math.Vec4;
 
 pub const Camera = struct {
     position: Vec3 = .{ .x = 0, .y = 0, .z = 0 }, // initial world pos
-    yaw: f32 = 0, // rotation around the up vector (left/right) in radians
+
+    yaw: f32 = -std.math.pi / 2.0, // rotation around the up vector (left/right) in radians
     pitch: f32 = 0, // rotation around the camera right axis (up/down) in radians
+
     sensitivity: f32 = 0.002, // mouse sensitivity
+    move_speed: f32 = 12.0, // move speed
+
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
+
     fov: f32 = 60, // field of view in degrees
-    near: f32 = 0.1, // distance to near plane
-    far: f32 = 20000.0, // distance to far plane
+    near: f32 = 1.0, // distance to near plane
+    far: f32 = 200.0, // distance to far plane
 };
 
 pub const WorldLighting = struct {
