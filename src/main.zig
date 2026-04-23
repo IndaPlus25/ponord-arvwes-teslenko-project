@@ -226,15 +226,14 @@ fn renderScene(
             if (render.facingAway(v1, v2, v3)) continue;
 
             // TEMP: random colors for triangles for debugging
-            const idx = @as(u32, @truncate(tri_index));
-            const r: u32 = (idx *% 2654435761) & 0xFF;
-            const g: u32 = ((idx *% 2654435761) >> 8) & 0xFF;
-            const b: u32 = ((idx *% 2654435761) >> 16) & 0xFF;
+            const group_id = object.triangle_groups.items[tri_index];
+            const r: u32 = (group_id *% 2654435761) & 0xFF;
+            const g: u32 = ((group_id *% 2654435761) >> 8) & 0xFF;
+            const b: u32 = ((group_id *% 2654435761) >> 16) & 0xFF;
             const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
-
             const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
-            render.fillTriangle(v1, v2, v3, fb, zb, final_color);
 
+            render.fillTriangle(v1, v2, v3, fb, zb, final_color);
             drawn_triangles += 1;
         }
     }
@@ -382,7 +381,7 @@ pub fn main() !void {
     defer object_list.deinit(allocator);
 
     var kokiri_obj = try Object.init(kokiri_model, &allocator);
-    kokiri_obj.moveTo(-4, 2, -1);
+    kokiri_obj.moveTo(0, 0, 0);
     defer kokiri_obj.deinit();
     try object_list.append(allocator, kokiri_obj);
 

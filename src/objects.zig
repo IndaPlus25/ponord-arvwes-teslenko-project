@@ -9,6 +9,7 @@ pub const Object = struct {
 
     triangles: std.ArrayList([3]math.Vec4),
     triangle_uvs: std.ArrayList([3][2]f32),
+    triangle_groups: std.ArrayList(u32),
     allocator: *const std.mem.Allocator,
 
     pub fn init(model: Model, allocator: *const std.mem.Allocator) !Object {
@@ -18,6 +19,7 @@ pub const Object = struct {
             .z = 0,
             .triangles = try model.triangles.clone(allocator.*),
             .triangle_uvs = try model.triangle_uvs.clone(allocator.*),
+            .triangle_groups = try model.triangle_groups.clone(allocator.*),
             .allocator = allocator,
         };
     }
@@ -25,6 +27,7 @@ pub const Object = struct {
     pub fn deinit(self: *Object) void {
         self.triangles.deinit(self.allocator.*);
         self.triangle_uvs.deinit(self.allocator.*);
+        self.triangle_groups.deinit(self.allocator.*);
     }
 
     // Move object by a vector
@@ -73,11 +76,13 @@ pub const Object = struct {
 pub const Model = struct {
     triangles: std.ArrayList([3]math.Vec4),
     triangle_uvs: std.ArrayList([3][2]f32),
+    triangle_groups: std.ArrayList(u32),
     allocator: *const std.mem.Allocator,
 
     pub fn deinit(self: *Model) void {
         self.triangles.deinit(self.allocator.*);
         self.triangle_uvs.deinit(self.allocator.*);
+        self.triangle_groups.deinit(self.allocator.*);
     }
 };
 
@@ -88,8 +93,11 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
     var uvs: std.ArrayList([2]f32) = .empty;
     var faces: std.ArrayList([3]math.Vec4) = .empty;
     var face_uvs: std.ArrayList([3][2]f32) = .empty;
+    var face_groups: std.ArrayList(u32) = .empty;
     defer vertexes.deinit(allocator.*);
     defer uvs.deinit(allocator.*);
+
+    var group_idx: u32 = 0;
 
     // Get file reader
     var line_buf: [64]u8 = undefined;
@@ -146,12 +154,13 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
                     uvs.items[curr_uv - 1],
                 });
 
+                try face_groups.append(allocator.*, group_idx);
+
                 prev_v = curr_v;
                 prev_uv = curr_uv;
             }
-        } else if (std.mem.eql(u8, key, "vn")) { // Parse for normals
-            // TODO Implement if we start using vertex normals
-
+        } else if (std.mem.eql(u8, key, "usemtl")) { // new group
+            group_idx += 1;
         } else if (std.mem.eql(u8, key, "vt")) { // Parse for textures
             const u = try std.fmt.parseFloat(f32, iter.next().?);
             const v = try std.fmt.parseFloat(f32, iter.next().?);
@@ -165,6 +174,7 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
     return Model{
         .triangles = faces,
         .triangle_uvs = face_uvs,
+        .triangle_groups = face_groups,
         .allocator = allocator,
     };
 }
