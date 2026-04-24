@@ -189,22 +189,30 @@ fn renderScene(
 ) struct { u64, u64 } {
     fb.clear();
 
-    // Y is the polar axis (spherical coordinates)
+    // Construct the camera's forward direction (spherical coordinates, y is polar axis)
     const forward = math.Vec3{
         .x = @cos(world_camera.pitch) * @sin(world_camera.yaw),
         .y = @sin(world_camera.pitch),
         .z = -@cos(world_camera.pitch) * @cos(world_camera.yaw),
     };
+    // Point camera at position + forward direction
     const target = world_camera.position.add(forward);
 
+    // Aspect ratio to avoid stretching the image in perspective matrix
     const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
+
+    // Construct the matrices to transform world space into clip space
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, target, world_camera.up);
-    const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
+
+    // Combine the two into one matrix so each vertex only needs one matrix multiplication
+    // (World to view to clip space)
+    const vp = proj_matrix.mul(view_matrix);
 
     var total_triangles: u64 = 0;
     var drawn_triangles: u64 = 0;
 
+    // Loop over all the objects & then every triangle in the object
     for (object_list.*.items) |object| {
         // TEMP: capture tri_index for random colors, remove this when adding textures
         for (object.triangles.items, 0..) |tri_v, tri_index| {
@@ -213,16 +221,22 @@ fn renderScene(
             const c1 = vp.mulVec4(tri_v[1]);
             const c2 = vp.mulVec4(tri_v[2]);
 
+            // TODO: VERY NAIVE NEAR PLANE CLIPPING
+            // Add sutherland-hodgman algorithm to split triangles in front of us
             if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
 
+            // Compute lighting in world space
             const p0 = tri_v[0].toVec3();
             const p1 = tri_v[1].toVec3();
             const p2 = tri_v[2].toVec3();
             const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
 
+            // Go from clip space to pixel coordinates
             const v1 = c0.toPixel(fb.width, fb.height);
             const v2 = c1.toPixel(fb.width, fb.height);
             const v3 = c2.toPixel(fb.width, fb.height);
+
+            // Skip triangles facing away
             if (render.facingAway(v1, v2, v3)) continue;
 
             // TEMP: random colors for triangles for debugging
@@ -231,8 +245,11 @@ fn renderScene(
             const g: u32 = ((group_id *% 2654435761) >> 8) & 0xFF;
             const b: u32 = ((group_id *% 2654435761) >> 16) & 0xFF;
             const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
+
+            // Apply lighting to the base color
             const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
 
+            // Rasterize
             render.fillTriangle(v1, v2, v3, fb, zb, final_color);
             drawn_triangles += 1;
         }
@@ -439,7 +456,7 @@ pub fn main() !void {
         _ = c.SDL_LockTexture(sdl_context.texture, null, &pixels, &pitch);
         const fb = render.FrameBuffer{
             .data = @ptrCast(@alignCast(pixels.?)),
-            .stride = @divExact(@as(usize, @intCast(pitch)), 4),
+            .stride = @divExact(@as(usize, @intCast(pitch)), 4), // pitch is bytes per row, each pixel is RGBA8888 (4 bytes)
             .width = sdl_context.fb_width,
             .height = sdl_context.fb_height,
         };
