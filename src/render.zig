@@ -69,12 +69,13 @@ pub const LightSource = union(enum) {
 
 pub const FrameBuffer = struct {
     data: [*]u32,
-    stride: usize,
+    stride: usize, // pixels per row
     width: c_int,
     height: c_int,
 
     pub fn setPixel(self: FrameBuffer, x: usize, y: usize, color: u32) void {
         if (x >= 0 and x < self.width and y >= 0 and y < self.height) {
+            // jump to the correct row & add x
             self.data[@as(usize, @intCast(y)) * self.stride + @as(usize, @intCast(x))] = color;
         }
     }
@@ -183,6 +184,8 @@ pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u3
     }
 }
 
+// This is equivalent to the z component of the cross product (b-a) x (c-a), by the right hand rule
+// we can see that either z points "into" the screen, or out, if it's pointing away from the camera we don't render it
 fn edgeFunction(a: Vec3, b: Vec3, c: Vec3) f32 {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
@@ -191,72 +194,92 @@ fn edgeFunction(a: Vec3, b: Vec3, c: Vec3) f32 {
 // https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/perspective-correct-interpolation-vertex-attributes.html
 // https://fgiesen.wordpress.com/2013/02/08/triangle-rasterization-in-practice/
 pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
-    const min_x_f = @min(v1.x, @min(v2.x, v3.x));
-    const min_y_f = @min(v1.y, @min(v2.y, v3.y));
-    const max_x_f = @max(v1.x, @max(v2.x, v3.x));
-    const max_y_f = @max(v1.y, @max(v2.y, v3.y));
+    // Find the smallest possible rectangle that the triangle fits inside,
+    // only loop through the pixels in this rectangle to avoid unnecessary work.
+    const min_x_f = @min(v1.x, @min(v2.x, v3.x)); // leftmost point
+    const min_y_f = @min(v1.y, @min(v2.y, v3.y)); // topmost point (y = 0 is top)
+    const max_x_f = @max(v1.x, @max(v2.x, v3.x)); // rightmost point
+    const max_y_f = @max(v1.y, @max(v2.y, v3.y)); // topmost point
 
+    // Convert to ints
     var min_x: isize = @intFromFloat(@floor(min_x_f));
     var min_y: isize = @intFromFloat(@floor(min_y_f));
     var max_x: isize = @intFromFloat(@ceil(max_x_f));
     var max_y: isize = @intFromFloat(@ceil(max_y_f));
 
+    // Clamp the bounding box, imagine if a triangle points off the side of the screen,
+    // we don't want to render that
     min_x = @max(min_x, 0);
     min_y = @max(min_y, 0);
     max_x = @min(max_x, @as(isize, @intCast(fb.width)) - 1);
     max_y = @min(max_y, @as(isize, @intCast(fb.height)) - 1);
 
-    const tri_area = edgeFunction(v1, v2, v3);
-    if (tri_area == 0) return; // not a triangle
+    // Get the signed area of the parallelogram that the points span
+    const area = edgeFunction(v1, v2, v3);
+    if (area == 0) return; // not a triangle
 
-    // Optimization by precalculating a bunch of stuff
-    const inv_area = 1.0 / tri_area;
+    // Precalculate the inverses
+    const inv_area = 1.0 / area;
     const inv_z1 = 1.0 / v1.z;
     const inv_z2 = 1.0 / v2.z;
     const inv_z3 = 1.0 / v3.z;
 
-    const dw0_dx = v2.y - v3.y;
-    const dw0_dy = v3.x - v2.x;
-    const dw1_dx = v3.y - v1.y;
+    // Precalculate the per-pixel deltas, we do this to avoid calling edgeFunction in the loop,
+    // we know that the edge function is linear, i.e. (x, y) to (x + 1, y) changes by a constant amount,
+    const dw0_dx = v2.y - v3.y; // change in w0 when stepping one pixel right
+    const dw0_dy = v3.x - v2.x; // change in w0 when stepping one pixel down
+    const dw1_dx = v3.y - v1.y; // ...
     const dw1_dy = v1.x - v3.x;
     const dw2_dx = v1.y - v2.y;
     const dw2_dy = v2.x - v1.x;
 
+    // Start at the top left corner of the bounding box
     const start = Vec3{ .x = @floatFromInt(min_x), .y = @floatFromInt(min_y), .z = 0 };
-    var w0_row = edgeFunction(v2, v3, start);
-    var w1_row = edgeFunction(v3, v1, start);
-    var w2_row = edgeFunction(v1, v2, start);
 
+    // Get the edgeFunction values at starting pixel, all of these have to match the sign
+    // of area for us to draw the pixel, otherwise it's not inside the triangle
+    var w0_row = edgeFunction(v2, v3, start); // which side of v2->v3 is start on
+    var w1_row = edgeFunction(v3, v1, start); // which side of v3->v1 is start on
+    var w2_row = edgeFunction(v1, v2, start); // which sode of v1->v2 is start on
+
+    // Walks down row by row
     var py: isize = min_y;
     while (py <= max_y) : (py += 1) {
+        // save the starting values
         var w0 = w0_row;
         var w1 = w1_row;
         var w2 = w2_row;
 
+        // Walks right pixel by pixel
         var px: isize = min_x;
         while (px <= max_x) : (px += 1) {
             // Check if the point p is on or inside the edges of the triangle
-            // We multiply by area to fix CCW since our toPixel function flips y in screen space
-            if (w0 * tri_area >= 0 and w1 * tri_area >= 0 and w2 * tri_area >= 0) {
-                // Perspective correct z
+            // If all three w*area is bigger or equal to zero, the pixel is on or in the triangle
+            if (w0 * area >= 0 and w1 * area >= 0 and w2 * area >= 0) {
+                // Cursed expression to get the perspective correct depth at this pixel
                 const z = 1.0 / ((w0 * inv_z1 + w1 * inv_z2 + w2 * inv_z3) * inv_area);
                 const ux: usize = @intCast(px);
                 const uy: usize = @intCast(py);
+                // If the depth of whatever is at this pixel is bigger than what we want to draw,
+                // that means our new pixel is closer, so we draw it and update the buffer
                 if (zb.getDepth(ux, uy) > z) {
                     fb.setPixel(ux, uy, color);
                     zb.setDepth(ux, uy, z);
                 }
             }
+            // add the delta to walk one pixel right
             w0 += dw0_dx;
             w1 += dw1_dx;
             w2 += dw2_dx;
         }
+        // add the delta to walk one row down
         w0_row += dw0_dy;
         w1_row += dw1_dy;
         w2_row += dw2_dy;
     }
 }
 
+// Essentially does the same thing as edgeFunction, used in main as a helper
 pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
     const edge1 = v2.sub(v1);
     const edge2 = v3.sub(v1);
