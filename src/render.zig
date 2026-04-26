@@ -1,5 +1,6 @@
 const std = @import("std");
 const math = @import("math.zig");
+const Vec2 = math.Vec2;
 const Vec3 = math.Vec3;
 const Vec4 = math.Vec4;
 
@@ -13,6 +14,23 @@ pub const Camera = struct {
     fov: f32 = 50, // field of view in degrees
     near: f32 = 1.0, // distance to near plane
     far: f32 = 200.0, // distance to far plane
+};
+
+pub const TextureBuffer = struct {
+    data: []u8,
+    width: usize,
+    height: usize,
+
+    pub fn getColor(self: TextureBuffer, U: f32, V: f32) u8 {
+        const x: usize = @round(U * (self.width - 1));
+        const y: usize = @round(V * (self.height - 1));
+        const index = x + (y * self.width);
+        return self.data[index];
+    }
+
+    pub fn clear(self: TextureBuffer) void {
+        @memset(self.data, 0);
+    }
 };
 
 pub const WorldLighting = struct {
@@ -193,7 +211,17 @@ fn edgeFunction(a: Vec3, b: Vec3, c: Vec3) f32 {
 // https://github.com/ssloy/tinyrenderer/wiki/Lesson-2:-Triangle-rasterization-and-back-face-culling
 // https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/perspective-correct-interpolation-vertex-attributes.html
 // https://fgiesen.wordpress.com/2013/02/08/triangle-rasterization-in-practice/
-pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
+pub fn fillTriangle(
+    v1: Vec3,
+    v2: Vec3,
+    v3: Vec3,
+    uv1: Vec2, //TODO create vertex struct
+    uv2: Vec2,
+    uv3: Vec2,
+    fb: FrameBuffer,
+    zb: *ZBuffer,
+    tb: TextureBuffer,
+) void {
     // Find the smallest possible rectangle that the triangle fits inside,
     // only loop through the pixels in this rectangle to avoid unnecessary work.
     const min_x_f = @min(v1.x, @min(v2.x, v3.x)); // leftmost point
@@ -263,6 +291,9 @@ pub fn fillTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer,
                 // If the depth of whatever is at this pixel is bigger than what we want to draw,
                 // that means our new pixel is closer, so we draw it and update the buffer
                 if (zb.getDepth(ux, uy) > z) {
+                    const uPixel = z * (w0 * uv1.u * inv_z1 + w1 * uv2.u * inv_z2 + w2 * uv3.u * inv_z3);
+                    const vPixel = z * (w0 * uv1.v * inv_z1 + w1 * uv2.v * inv_z2 + w2 * uv3.v * inv_z3);
+                    const color = tb.getColor(uPixel, vPixel);
                     fb.setPixel(ux, uy, color);
                     zb.setDepth(ux, uy, z);
                 }

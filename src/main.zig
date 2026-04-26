@@ -250,7 +250,8 @@ fn renderScene(
             const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
 
             // Rasterize
-            render.fillTriangle(v1, v2, v3, fb, zb, final_color);
+            //TODO init Texture bufer and get triangle UVs
+            render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb);
             drawn_triangles += 1;
         }
     }

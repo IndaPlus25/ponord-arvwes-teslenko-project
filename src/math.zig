@@ -1,5 +1,25 @@
 const std = @import("std");
 
+pub const Vec2 = struct {
+    u: f32,
+    v: f32,
+    pub fn add(self: Vec2, other: Vec2) Vec2 {
+        return .{ .x = self.x + other.x, .y = self.y + other.y };
+    }
+
+    pub fn sub(self: Vec2, other: Vec3) Vec2 {
+        return .{ .x = self.x - other.x, .y = self.y - other.y };
+    }
+
+    pub fn mul(self: Vec2, scalar: f32) Vec2 {
+        return .{ .x = self.x * scalar, .y = self.y * scalar };
+    }
+
+    pub fn dot(self: Vec2, other: Vec2) f32 {
+        return (self.x * other.x) + (self.y * other.y);
+    }
+};
+
 pub const Vec3 = struct {
     x: f32,
     y: f32,
