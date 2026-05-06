@@ -187,7 +187,7 @@ fn renderScene(
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
     world_lighting: *const render.WorldLighting,
-) struct { u64, u64 } {
+) struct { u64, u64, u64 } {
     fb.clear();
 
     // Y is the polar axis (spherical coordinates)
@@ -205,6 +205,7 @@ fn renderScene(
 
     var total_triangles: u64 = 0;
     var drawn_triangles: u64 = 0;
+    var clipped_triangles: u64 = 0;
 
     for (object_list.*.items) |object| {
         for (object.triangles.items) |tri_v| {
@@ -216,7 +217,9 @@ fn renderScene(
                 null
             };
             var cn: usize = 3; // Amount of vertexes that should be drawn
+            var did_clip: bool = false; // Whether or not any triangles have been clipped
 
+            // TODO: Move into its own function? If so, where?
             if (ca[0].?.z <= world_camera.near or ca[1].?.z <= world_camera.near or ca[2].?.z <= world_camera.near) {
                 cn = 0;
                 var new_ca: [4]?math.Vec4 = undefined;
@@ -247,6 +250,7 @@ fn renderScene(
                 }
 
                 ca = new_ca;
+                did_clip = true;
             }
             if (cn < 3) continue; // Only continue if we have 3 or more vertexes
 
@@ -268,21 +272,22 @@ fn renderScene(
             if (cn == 4) { // Draw the second triangle if the clipping resulted in a quad
                 const v4 = ca[3].?.toPixel(fb.width, fb.height);
                 render.fillTriangle(v1, v3, v4, fb, zb, color2);
+                drawn_triangles += 1;
             }
             // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
 
             drawn_triangles += 1;
-            // TODO: Count extra triangles generated from clipping
+            if (did_clip) clipped_triangles += cn - 2;
         }
     }
 
-    return .{ total_triangles, drawn_triangles };
+    return .{ total_triangles, drawn_triangles, clipped_triangles };
 }
 
 fn renderImGui(
     texture: *c.SDL_Texture,
     frame_times: *[graph_samples]f32,
-    triangles: struct { u64, u64 },
+    triangles: struct { u64, u64, u64 },
     world_camera: *render.Camera,
     app_state: *AppState,
     viewport_settings: *ViewportSettings,
@@ -341,6 +346,7 @@ fn renderImGui(
     if (c.ImGui_Begin("Render Metrics", null, 0)) {
         c.ImGui_Text("Total Triangles: %d", triangles[0]);
         c.ImGui_Text("Drawn Triangles: %d", triangles[1]);
+        c.ImGui_Text("Clipped Triangles: %d", triangles[2]);
     }
     c.ImGui_End();
 
