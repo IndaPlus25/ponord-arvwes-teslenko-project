@@ -22,8 +22,10 @@ pub const TextureBuffer = struct {
     height: usize,
 
     pub fn getColor(self: TextureBuffer, U: f32, V: f32) u8 {
-        const x: usize = @round(U * (self.width - 1));
-        const y: usize = @round(V * (self.height - 1));
+        const u_wrapped: f32 = U - @floor(U);
+        const v_wrapped: f32 = V - @floor(V);
+        const x: usize = @round(u_wrapped * @as(f32, @floatFromInt(self.width - 1)));
+        const y: usize = @round(v_wrapped * @as(f32, @floatFromInt(self.height - 1)));
         const index = x + (y * self.width);
         return self.data[index];
     }
@@ -291,8 +293,8 @@ pub fn fillTriangle(
                 // If the depth of whatever is at this pixel is bigger than what we want to draw,
                 // that means our new pixel is closer, so we draw it and update the buffer
                 if (zb.getDepth(ux, uy) > z) {
-                    const uPixel = z * (w0 * uv1.u * inv_z1 + w1 * uv2.u * inv_z2 + w2 * uv3.u * inv_z3);
-                    const vPixel = z * (w0 * uv1.v * inv_z1 + w1 * uv2.v * inv_z2 + w2 * uv3.v * inv_z3);
+                    const uPixel = z * (w0 * uv1.u * inv_z1 + w1 * uv2.u * inv_z2 + w2 * uv3.u * inv_z3) * inv_area;
+                    const vPixel = z * (w0 * uv1.v * inv_z1 + w1 * uv2.v * inv_z2 + w2 * uv3.v * inv_z3) * inv_area;
                     const color = tb.getColor(uPixel, vPixel);
                     fb.setPixel(ux, uy, color);
                     zb.setDepth(ux, uy, z);
