@@ -236,6 +236,10 @@ fn renderScene(
             const v2 = c1.toPixel(fb.width, fb.height);
             const v3 = c2.toPixel(fb.width, fb.height);
 
+            const uv1: f32 = object.triangle_uvs[tri_index][0];
+            const uv2: f32 = object.triangle_uvs[tri_index][1];
+            const uv3: f32 = object.triangle_uvs[tri_index][2];
+
             // Skip triangles facing away
             if (render.facingAway(v1, v2, v3)) continue;
 
