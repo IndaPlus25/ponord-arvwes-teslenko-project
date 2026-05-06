@@ -209,11 +209,46 @@ fn renderScene(
     for (object_list.*.items) |object| {
         for (object.triangles.items) |tri_v| {
             total_triangles += 1;
-            const c0 = vp.mulVec4(tri_v[0]);
-            const c1 = vp.mulVec4(tri_v[1]);
-            const c2 = vp.mulVec4(tri_v[2]);
+            var ca = [4]?math.Vec4{ // Array of vertexes
+                vp.mulVec4(tri_v[0]),
+                vp.mulVec4(tri_v[1]),
+                vp.mulVec4(tri_v[2]),
+                null
+            };
+            var cn: usize = 3; // Amount of vertexes that should be drawn
 
-            if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
+            if (ca[0].?.z <= 0 or ca[1].?.z <= 0 or ca[2].?.z <= 0) {
+                cn = 0;
+                var new_ca: [4]?math.Vec4 = undefined;
+
+                for (0..3) |i| {
+                    const curr_c = ca[i].?;
+                    const next_c = ca[(i + 1) % 3].?;
+
+                    const curr_in = curr_c.z > 0; 
+                    const next_in = next_c.z > 0; 
+
+                    if (curr_in != next_in) {
+                        const t = curr_c.z / (curr_c.z - next_c.z);
+                        const intersect = math.Vec4{ // The intersection point
+                            .x = curr_c.x + t * (next_c.x - curr_c.x),
+                            .y = curr_c.y + t * (next_c.y - curr_c.y),
+                            .z = 0,
+                            .w = curr_c.w + t * (next_c.w - curr_c.w),
+                        };
+                        new_ca[cn] = intersect;
+                        cn += 1;
+                    }
+
+                    if (next_in) {
+                        new_ca[cn] = next_c;
+                        cn += 1;
+                    }
+                }
+
+                ca = new_ca;
+            }
+            if (cn < 3) continue; // Only continue if we have 3 or more vertexes
 
             const p0 = tri_v[0].toVec3();
             const p1 = tri_v[1].toVec3();
@@ -221,17 +256,23 @@ fn renderScene(
 
             const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
 
-            const v1 = c0.toPixel(fb.width, fb.height);
-            const v2 = c1.toPixel(fb.width, fb.height);
-            const v3 = c2.toPixel(fb.width, fb.height);
+            const v1 = ca[0].?.toPixel(fb.width, fb.height);
+            const v2 = ca[1].?.toPixel(fb.width, fb.height);
+            const v3 = ca[2].?.toPixel(fb.width, fb.height);
 
             if (render.facingAway(v1, v2, v3)) continue;
             const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
             const color2: u32 = render.multiplyRgb(color, tri_ilum);
+
             render.fillTriangle(v1, v2, v3, fb, zb, color2);
+            if (cn == 4) { // Draw the second triangle if the clipping resulted in a quad
+                const v4 = ca[3].?.toPixel(fb.width, fb.height);
+                render.fillTriangle(v1, v3, v4, fb, zb, color2);
+            }
             // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
 
             drawn_triangles += 1;
+            // TODO: Count extra triangles generated from clipping
         }
     }
 
