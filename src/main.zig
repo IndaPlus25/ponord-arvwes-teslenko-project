@@ -185,7 +185,7 @@ fn renderScene(
     zb: *render.ZBuffer,
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
-    world_lighting: *const render.WorldLighting,
+    // world_lighting: *const render.WorldLighting,
 ) struct { u64, u64 } {
     fb.clear();
 
@@ -225,33 +225,30 @@ fn renderScene(
             // Add sutherland-hodgman algorithm to split triangles in front of us
             if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
 
-            // Compute lighting in world space
-            const p0 = tri_v[0].toVec3();
-            const p1 = tri_v[1].toVec3();
-            const p2 = tri_v[2].toVec3();
-            const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
+            // // Compute lighting in world space
+            // const p0 = tri_v[0].toVec3();
+            // const p1 = tri_v[1].toVec3();
+            // const p2 = tri_v[2].toVec3();
+            // const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
 
             // Go from clip space to pixel coordinates
             const v1 = c0.toPixel(fb.width, fb.height);
             const v2 = c1.toPixel(fb.width, fb.height);
             const v3 = c2.toPixel(fb.width, fb.height);
 
-            const uv1: f32 = object.triangle_uvs.items[tri_index][0];
-            const uv2: f32 = object.triangle_uvs.items[tri_index][1];
-            const uv3: f32 = object.triangle_uvs.items[tri_index][2];
+            const uv1 = object.triangle_uvs.items[tri_index][0];
+            const uv2 = object.triangle_uvs.items[tri_index][1];
+            const uv3 = object.triangle_uvs.items[tri_index][2];
 
             // Skip triangles facing away
             if (render.facingAway(v1, v2, v3)) continue;
 
-            // TEMP: random colors for triangles for debugging
-            const group_id = object.triangle_groups.items[tri_index];
-            const r: u32 = (group_id *% 2654435761) & 0xFF;
-            const g: u32 = ((group_id *% 2654435761) >> 8) & 0xFF;
-            const b: u32 = ((group_id *% 2654435761) >> 16) & 0xFF;
-            const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
+            const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
+            const tb = object.textures.items[tex_id];
 
-            // Apply lighting to the base color
-            const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
+            // Apply lighting
+            // const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
+            // const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
 
             // Rasterize
             //TODO init Texture bufer and get triangle UVs
@@ -412,12 +409,12 @@ pub fn main() !void {
         .position = .{ .x = 3, .y = 2, .z = 6 },
     };
 
-    const light_sources = [_]render.LightSource{
-        .{ .SkyLight = .{ .brightness = 1 } },
-        .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
-    };
+    // const light_sources = [_]render.LightSource{
+    // .{ .SkyLight = .{ .brightness = 1 } },
+    // .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
+    // };
 
-    const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
+    // const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
 
     // Performance variables
     const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
@@ -466,7 +463,8 @@ pub fn main() !void {
             .height = sdl_context.fb_height,
         };
         zb.clear();
-        const triangles = renderScene(fb, &zb, &object_list, &world_camera, &world_lighting);
+        // TODO: Add back lighting
+        const triangles = renderScene(fb, &zb, &object_list, &world_camera);
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
         // Present texture & draw imgui

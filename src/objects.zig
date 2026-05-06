@@ -5,7 +5,6 @@ const render = @import("render.zig");
 // Import the yoinked image handler
 // https://github.com/nothings/stb/blob/master/stb_image.h
 const c = @cImport({
-    @cDefine("STB_IMAGE_IMPLEMENTATION", {});
     @cInclude("stb_image.h");
 });
 
@@ -107,7 +106,7 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
     var vertexes: std.ArrayList(math.Vec4) = .empty;
     var uvs: std.ArrayList(math.Vec2) = .empty;
     var faces: std.ArrayList([3]math.Vec4) = .empty;
-    var face_uvs: std.ArrayList(math.Vec2) = .empty;
+    var face_uvs: std.ArrayList([3]math.Vec2) = .empty;
     var face_groups: std.ArrayList(u32) = .empty;
     var textures: std.ArrayList(render.TextureBuffer) = .empty;
     var material_map = std.StringHashMap(u32).init(allocator.*);
@@ -208,7 +207,7 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
         } else if (std.mem.eql(u8, key, "vt")) { // Parse for textures
             const u = try std.fmt.parseFloat(f32, iter.next().?);
             const v = try std.fmt.parseFloat(f32, iter.next().?);
-            try uvs.append(allocator.*, .{ u, v });
+            try uvs.append(allocator.*, .{ .u = u, .v = v });
         }
     } else |err| if (err != error.EndOfStream) {
         return err;
