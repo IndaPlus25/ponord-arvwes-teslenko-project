@@ -1,5 +1,33 @@
 const std = @import("std");
 
+pub const Vec2 = struct {
+    u: f32,
+    v: f32,
+
+    pub fn add(self: Vec2, other: Vec2) Vec2 {
+        return .{ .u = self.u + other.u, .v = self.v + other.v };
+    }
+
+    pub fn sub(self: Vec2, other: Vec2) Vec2 {
+        return .{ .u = self.u - other.u, .v = self.v - other.v };
+    }
+
+    pub fn mul(self: Vec2, scalar: f32) Vec2 {
+        return .{ .u = self.u * scalar, .v = self.v * scalar };
+    }
+
+    pub fn dot(self: Vec2, other: Vec2) f32 {
+        return self.u * other.u + self.v * other.v;
+    }
+
+    pub fn lerp(a: Vec2, b: Vec2, t: f32) Vec2 {
+        return .{
+            .u = a.u + (b.u - a.u) * t,
+            .v = a.v + (b.v - a.v) * t,
+        };
+    }
+};
+
 pub const Vec3 = struct {
     x: f32,
     y: f32,
@@ -78,7 +106,7 @@ pub const Vec4 = struct {
         return .{
             .x = (self.x * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_w)),
             .y = (-self.y * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_h)), // flipped sign because negative is up
-            .z = self.z,
+            .z = self.w,
         };
     }
 };

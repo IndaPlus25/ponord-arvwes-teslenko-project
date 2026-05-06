@@ -168,7 +168,6 @@ fn updateMovement(world_camera: *render.Camera, delta: f32) void {
     if (keys[c.SDL_SCANCODE_A]) velocity = velocity.sub(move_right);
 
     // Normalize horizontal movement so W+D isn't sqr(2) faster
-    const speed: f32 = 400.0;
     if (velocity.len() > 0.0) {
         velocity = velocity.norm();
     }
@@ -178,7 +177,7 @@ fn updateMovement(world_camera: *render.Camera, delta: f32) void {
     if (keys[c.SDL_SCANCODE_LSHIFT]) velocity.y -= 1;
 
     // Apply movement
-    world_camera.position = world_camera.position.add(velocity.mul(speed * delta));
+    world_camera.position = world_camera.position.add(velocity.mul(world_camera.move_speed * delta));
 }
 
 fn renderScene(
@@ -186,69 +185,103 @@ fn renderScene(
     zb: *render.ZBuffer,
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
-    world_lighting: *const render.WorldLighting,
+    // world_lighting: *const render.WorldLighting,
 ) struct { u64, u64, u64 } {
     fb.clear();
 
-    // Y is the polar axis (spherical coordinates)
+    // Construct the camera's forward direction (spherical coordinates, y is polar axis)
     const forward = math.Vec3{
         .x = @cos(world_camera.pitch) * @sin(world_camera.yaw),
         .y = @sin(world_camera.pitch),
         .z = -@cos(world_camera.pitch) * @cos(world_camera.yaw),
     };
+    // Point camera at position + forward direction
     const target = world_camera.position.add(forward);
 
+    // Aspect ratio to avoid stretching the image in perspective matrix
     const aspect = @as(f32, @floatFromInt(fb.width)) / @as(f32, @floatFromInt(fb.height));
+
+    // Construct the matrices to transform world space into clip space
     const proj_matrix = math.Mat4.perspective(world_camera.fov, aspect, world_camera.near, world_camera.far);
     const view_matrix = math.Mat4.viewMatrix(world_camera.position, target, world_camera.up);
-    const vp = proj_matrix.mul(view_matrix); // world to view to clip space in one matrix
+
+    // Combine the two into one matrix so each vertex only needs one matrix multiplication
+    // (World to view to clip space)
+    const vp = proj_matrix.mul(view_matrix);
 
     var total_triangles: u64 = 0;
     var drawn_triangles: u64 = 0;
     var clipped_triangles: u64 = 0;
 
+    // Loop over all the objects & then every triangle in the object
     for (object_list.*.items) |object| {
-        for (object.triangles.items) |tri_v| {
+        // TEMP: capture tri_index for random colors, remove this when adding textures
+        for (object.triangles.items, 0..) |tri_v, tri_index| {
             total_triangles += 1;
+
             var ca = [4]?math.Vec4{ // Array of vertexes
                 vp.mulVec4(tri_v[0]),
                 vp.mulVec4(tri_v[1]),
                 vp.mulVec4(tri_v[2]),
-                null // Incase the near face clipping gives us a fourth vertex (quad)
+                null, // Incase the near face clipping gives us a fourth vertex (quad)
             };
+
+            var cu = [4]?math.Vec2{
+                object.triangle_uvs.items[tri_index][0],
+                object.triangle_uvs.items[tri_index][1],
+                object.triangle_uvs.items[tri_index][2],
+                null,
+            };
+
             var cn: usize = 3; // Amount of vertexes that we have
             var did_clip: bool = false; // Whether or not any triangles have been clipped
 
-            if (ca[0].?.z <= world_camera.near or ca[1].?.z <= world_camera.near or ca[2].?.z <= world_camera.near) {
-                const x = render.nearPlaneClip(ca, world_camera.near);
+            if (ca[0].?.w <= world_camera.near or ca[1].?.w <= world_camera.near or ca[2].?.w <= world_camera.near) {
+                const x = render.nearPlaneClip(ca, cu, world_camera.near);
                 ca = x[0];
-                cn = x[1];
+                cu = x[1];
+                cn = x[2];
                 did_clip = true;
             }
             if (cn < 3) continue; // Only continue if we have 3 or more vertexes
 
-            const p0 = tri_v[0].toVec3();
-            const p1 = tri_v[1].toVec3();
-            const p2 = tri_v[2].toVec3();
-
-            const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
+            // // Compute lighting in world space
+            // const p0 = tri_v[0].toVec3();
+            // const p1 = tri_v[1].toVec3();
+            // const p2 = tri_v[2].toVec3();
+            // const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
 
             const v1 = ca[0].?.toPixel(fb.width, fb.height);
             const v2 = ca[1].?.toPixel(fb.width, fb.height);
             const v3 = ca[2].?.toPixel(fb.width, fb.height);
 
-            if (render.facingAway(v1, v2, v3)) continue;
-            const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
-            const color2: u32 = render.multiplyRgb(color, tri_ilum);
+            const uv1 = cu[0].?;
+            const uv2 = cu[1].?;
+            const uv3 = cu[2].?;
 
-            render.fillTriangle(v1, v2, v3, fb, zb, color2);
-            if (cn == 4) { // Draw the second triangle if the clipping resulted in a quad
+            // Skip triangles facing away
+            if (render.facingAway(v1, v2, v3)) continue;
+            // const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
+            // const color2: u32 = render.multiplyRgb(color, tri_ilum);
+
+            const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
+            const tb = object.textures.items[tex_id];
+
+            // Apply lighting
+            // const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
+            // const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
+
+            render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb);
+
+            if (cn == 4) {
                 const v4 = ca[3].?.toPixel(fb.width, fb.height);
-                render.fillTriangle(v1, v3, v4, fb, zb, color2);
+                const uv4 = cu[3].?;
+
+                render.fillTriangle(v1, v3, v4, uv1, uv3, uv4, fb, zb, tb);
                 drawn_triangles += 1;
             }
-            // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
 
+            //TODO init Texture bufer and get triangle UVs
             drawn_triangles += 1;
             if (did_clip) clipped_triangles += cn - 2;
         }
@@ -281,7 +314,6 @@ fn renderImGui(
         }
 
         const avail = c.ImGui_GetContentRegionAvail();
-
         desired_w = @max(1, @as(c_int, @intFromFloat(avail.x * viewport_settings.render_scale)));
         desired_h = @max(1, @as(c_int, @intFromFloat(avail.y * viewport_settings.render_scale)));
 
@@ -292,30 +324,56 @@ fn renderImGui(
     }
     c.ImGui_End();
 
-    // Display settings
-    if (c.ImGui_Begin("Display Settings", null, 0)) {
-        _ = c.ImGui_SliderFloat("Render Scale", &viewport_settings.render_scale, 0.1, 1.0);
-        c.ImGui_Text("Framebuffer: %d x %d", desired_w, desired_h);
+    if (c.ImGui_Begin("Camera Settings", null, 0)) {
+        if (c.ImGui_CollapsingHeader("Position", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("X", &world_camera.position.x);
+            _ = c.ImGui_InputFloat("Y", &world_camera.position.y);
+            _ = c.ImGui_InputFloat("Z", &world_camera.position.z);
+        }
+
+        if (c.ImGui_CollapsingHeader("Rotation", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("Yaw", &world_camera.yaw);
+            _ = c.ImGui_InputFloat("Pitch", &world_camera.pitch);
+        }
+
+        if (c.ImGui_CollapsingHeader("Movement", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("Move Speed", &world_camera.move_speed);
+            _ = c.ImGui_InputFloat("Sensitivity", &world_camera.sensitivity);
+        }
+
+        if (c.ImGui_CollapsingHeader("Projection", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("FOV", &world_camera.fov);
+            _ = c.ImGui_InputFloat("Near Plane", &world_camera.near);
+            _ = c.ImGui_InputFloat("Far Plane", &world_camera.far);
+        }
+
+        if (c.ImGui_CollapsingHeader("Post Processing", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_InputFloat("Render Scale", &viewport_settings.render_scale);
+        }
     }
     c.ImGui_End();
 
-    // Performance Metrics (FPS, etc)
     if (c.ImGui_Begin("Performance Metrics", null, 0)) {
-        const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples; // Sums array and divides by amount of samples to get average
+        const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples;
+        const fps = 1000.0 / avg_delay;
 
-        c.ImGui_Text("FPS: %.2f", 1000.0 / frame_times.*[graph_samples - 1]);
-        c.ImGui_Text("Avg. FPS: %.2f", 1000.0 / avg_delay);
-
-        c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
+        c.ImGui_Text("FPS: %.1f", fps);
         c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples - 1]);
-        c.ImGui_Text("Avg. Frame Time: %.2f ms", avg_delay);
 
-        c.ImGui_Dummy(c.ImVec2{ .x = 10, .y = 5 }); // Add a bit of space
+        c.ImGui_Separator();
+
+        var frame_counter: u32 = 0;
+        frame_counter += 1;
+        if (frame_counter >= 4) {
+            frame_counter = 0;
+        }
+
         c.ImGui_PlotLines("Frame Times", frame_times, graph_samples);
+
+        c.ImGui_Text("Avg Frame Time: %.2f ms", avg_delay);
     }
     c.ImGui_End();
 
-    // Render Metrics (Triangle counts, etc)
     if (c.ImGui_Begin("Render Metrics", null, 0)) {
         c.ImGui_Text("Total Triangles: %d", triangles[0]);
         c.ImGui_Text("Drawn Triangles: %d", triangles[1]);
@@ -323,10 +381,9 @@ fn renderImGui(
     }
     c.ImGui_End();
 
-    // Input Info
-    if (c.ImGui_Begin("Input information", null, 0)) {
-        c.ImGui_Text("Input Yaw: %.2f", world_camera.yaw);
-        c.ImGui_Text("Input Pitch: %.2f", world_camera.pitch);
+    if (c.ImGui_Begin("Input Information", null, 0)) {
+        c.ImGui_Text("Yaw:   %.2f", world_camera.yaw);
+        c.ImGui_Text("Pitch: %.2f", world_camera.pitch);
         _ = c.ImGui_Checkbox("Mouse Captured", &app_state.mouse_captured);
     }
     c.ImGui_End();
@@ -358,7 +415,18 @@ pub fn main() !void {
     var pitch: c_int = 0;
 
     // Load models
-    var kokiri_model = try objects.loadModel("models/kokiri.obj", &allocator);
+    var kokiri_model = try objects.loadModel("models/Kokiri Forest/Kokiri Forest.obj", &allocator);
+
+    const world_scale: f32 = 0.02;
+
+    // Scale down the world
+    for (kokiri_model.triangles.items) |*tri| {
+        for (0..3) |i| {
+            tri[i].x *= world_scale;
+            tri[i].y *= world_scale;
+            tri[i].z *= world_scale;
+        }
+    }
     defer kokiri_model.deinit();
 
     // Prepare objects
@@ -366,7 +434,7 @@ pub fn main() !void {
     defer object_list.deinit(allocator);
 
     var kokiri_obj = try Object.init(kokiri_model, &allocator);
-    kokiri_obj.moveTo(-4, 2, -1);
+    kokiri_obj.moveTo(0, 0, 0);
     defer kokiri_obj.deinit();
     try object_list.append(allocator, kokiri_obj);
 
@@ -375,12 +443,12 @@ pub fn main() !void {
         .position = .{ .x = 3, .y = 2, .z = 6 },
     };
 
-    const light_sources = [_]render.LightSource{
-        .{ .SkyLight = .{ .brightness = 1 } },
-        .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
-    };
+    // const light_sources = [_]render.LightSource{
+    // .{ .SkyLight = .{ .brightness = 1 } },
+    // .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
+    // };
 
-    const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
+    // const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
 
     // Performance variables
     const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
@@ -424,12 +492,13 @@ pub fn main() !void {
         _ = c.SDL_LockTexture(sdl_context.texture, null, &pixels, &pitch);
         const fb = render.FrameBuffer{
             .data = @ptrCast(@alignCast(pixels.?)),
-            .stride = @divExact(@as(usize, @intCast(pitch)), 4),
+            .stride = @divExact(@as(usize, @intCast(pitch)), 4), // pitch is bytes per row, each pixel is RGBA8888 (4 bytes)
             .width = sdl_context.fb_width,
             .height = sdl_context.fb_height,
         };
         zb.clear();
-        const triangles = renderScene(fb, &zb, &object_list, &world_camera, &world_lighting);
+        // TODO: Add back lighting
+        const triangles = renderScene(fb, &zb, &object_list, &world_camera);
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
         // Present texture & draw imgui

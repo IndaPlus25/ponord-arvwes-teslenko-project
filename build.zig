@@ -34,6 +34,14 @@ pub fn build(b: *std.Build) void {
     exe.linkLibrary(imgui_dep.artifact("imgui"));
     exe.addIncludePath(imgui_dep.path("dcimgui"));
     exe.addIncludePath(imgui_dep.path("dcimgui/backends"));
+    exe.addIncludePath(b.path("src"));
+
+    exe.addCSourceFile(.{
+        .file = b.path("src/stb_image_impl.c"),
+        .flags = &.{ "-DSTBI_NO_SIMD", "-DSTBI_NO_HDR" },
+    });
+
+    exe.linkLibC();
 
     b.installArtifact(exe);
 
