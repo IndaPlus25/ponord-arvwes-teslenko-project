@@ -123,7 +123,7 @@ pub const ZBuffer = struct {
     }
 
     pub fn clear(self: ZBuffer) void {
-        @memset(self.data, 1.0);
+        @memset(self.data, 20000.0); // Should be the same as Camera.far, or larger
     }
 
     pub fn deinit(self: ZBuffer) void {
@@ -322,6 +322,38 @@ pub fn facingAway(v1: Vec3, v2: Vec3, v3: Vec3) bool {
     const edge1 = v2.sub(v1);
     const edge2 = v3.sub(v1);
     return edge1.cross(edge2).z >= 0;
+}
+
+pub fn nearPlaneClip(c: [4]?Vec4, near_plane: f32) struct { [4]?Vec4, usize } {
+    var new_c: [4]?Vec4 = undefined;
+    var cn: usize = 0;
+
+    for (0..3) |i| {
+        const curr_c = c[i].?;
+        const next_c = c[(i + 1) % 3].?;
+
+        const curr_in = curr_c.z > near_plane; 
+        const next_in = next_c.z > near_plane; 
+
+        if (curr_in != next_in) {
+            const t = curr_c.z / (curr_c.z - next_c.z);
+            const intersect = Vec4{ // The intersection point
+                .x = curr_c.x + t * (next_c.x - curr_c.x),
+                .y = curr_c.y + t * (next_c.y - curr_c.y),
+                .z = near_plane,
+                .w = curr_c.w + t * (next_c.w - curr_c.w), // TODO: Can maybe be set to world_camer.near for the same result? Unless I'm missing something
+            };
+            new_c[cn] = intersect;
+            cn += 1;
+        }
+
+        if (next_in) {
+            new_c[cn] = next_c;
+            cn += 1;
+        }
+    }
+
+    return .{ new_c, cn };
 }
 
 pub fn multiplyRgb(color: u32, factor: f32) u32 {

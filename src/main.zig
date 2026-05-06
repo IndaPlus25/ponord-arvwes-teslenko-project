@@ -185,8 +185,8 @@ fn renderScene(
     zb: *render.ZBuffer,
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
-    // world_lighting: *const render.WorldLighting,
-) struct { u64, u64 } {
+    world_lighting: *const render.WorldLighting,
+) struct { u64, u64, u64 } {
     fb.clear();
 
     // Construct the camera's forward direction (spherical coordinates, y is polar axis)
@@ -211,19 +211,29 @@ fn renderScene(
 
     var total_triangles: u64 = 0;
     var drawn_triangles: u64 = 0;
+    var clipped_triangles: u64 = 0;
 
     // Loop over all the objects & then every triangle in the object
     for (object_list.*.items) |object| {
         // TEMP: capture tri_index for random colors, remove this when adding textures
         for (object.triangles.items, 0..) |tri_v, tri_index| {
             total_triangles += 1;
-            const c0 = vp.mulVec4(tri_v[0]);
-            const c1 = vp.mulVec4(tri_v[1]);
-            const c2 = vp.mulVec4(tri_v[2]);
+            var ca = [4]?math.Vec4{ // Array of vertexes
+                vp.mulVec4(tri_v[0]),
+                vp.mulVec4(tri_v[1]),
+                vp.mulVec4(tri_v[2]),
+                null // Incase the near face clipping gives us a fourth vertex (quad)
+            };
+            var cn: usize = 3; // Amount of vertexes that we have
+            var did_clip: bool = false; // Whether or not any triangles have been clipped
 
-            // TODO: VERY NAIVE NEAR PLANE CLIPPING
-            // Add sutherland-hodgman algorithm to split triangles in front of us
-            if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
+            if (ca[0].?.z <= world_camera.near or ca[1].?.z <= world_camera.near or ca[2].?.z <= world_camera.near) {
+                const x = render.nearPlaneClip(ca, world_camera.near);
+                ca = x[0];
+                cn = x[1];
+                did_clip = true;
+            }
+            if (cn < 3) continue; // Only continue if we have 3 or more vertexes
 
             // // Compute lighting in world space
             // const p0 = tri_v[0].toVec3();
@@ -231,10 +241,9 @@ fn renderScene(
             // const p2 = tri_v[2].toVec3();
             // const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
 
-            // Go from clip space to pixel coordinates
-            const v1 = c0.toPixel(fb.width, fb.height);
-            const v2 = c1.toPixel(fb.width, fb.height);
-            const v3 = c2.toPixel(fb.width, fb.height);
+            const v1 = ca[0].?.toPixel(fb.width, fb.height);
+            const v2 = ca[1].?.toPixel(fb.width, fb.height);
+            const v3 = ca[2].?.toPixel(fb.width, fb.height);
 
             const uv1 = object.triangle_uvs.items[tri_index][0];
             const uv2 = object.triangle_uvs.items[tri_index][1];
@@ -242,6 +251,16 @@ fn renderScene(
 
             // Skip triangles facing away
             if (render.facingAway(v1, v2, v3)) continue;
+            const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
+            const color2: u32 = render.multiplyRgb(color, tri_ilum);
+
+            render.fillTriangle(v1, v2, v3, fb, zb, color2);
+            if (cn == 4) { // Draw the second triangle if the clipping resulted in a quad
+                const v4 = ca[3].?.toPixel(fb.width, fb.height);
+                render.fillTriangle(v1, v3, v4, fb, zb, color2);
+                drawn_triangles += 1;
+            }
+            // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
 
             const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
             const tb = object.textures.items[tex_id];
@@ -254,16 +273,17 @@ fn renderScene(
             //TODO init Texture bufer and get triangle UVs
             render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb);
             drawn_triangles += 1;
+            if (did_clip) clipped_triangles += cn - 2;
         }
     }
 
-    return .{ total_triangles, drawn_triangles };
+    return .{ total_triangles, drawn_triangles, clipped_triangles };
 }
 
 fn renderImGui(
     texture: *c.SDL_Texture,
     frame_times: *[graph_samples]f32,
-    triangles: struct { u64, u64 },
+    triangles: struct { u64, u64, u64 },
     world_camera: *render.Camera,
     app_state: *AppState,
     viewport_settings: *ViewportSettings,
@@ -345,8 +365,9 @@ fn renderImGui(
     c.ImGui_End();
 
     if (c.ImGui_Begin("Render Metrics", null, 0)) {
-        c.ImGui_Text("Total Triangles: %llu", triangles[0]);
-        c.ImGui_Text("Drawn Triangles: %llu", triangles[1]);
+        c.ImGui_Text("Total Triangles: %d", triangles[0]);
+        c.ImGui_Text("Drawn Triangles: %d", triangles[1]);
+        c.ImGui_Text("Clipped Triangles: %d", triangles[2]);
     }
     c.ImGui_End();
 
