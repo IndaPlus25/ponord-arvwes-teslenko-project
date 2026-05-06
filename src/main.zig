@@ -187,7 +187,7 @@ fn renderScene(
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
     world_lighting: *const render.WorldLighting,
-) struct { u64, u64 } {
+) struct { u64, u64, u64 } {
     fb.clear();
 
     // Y is the polar axis (spherical coordinates)
@@ -205,15 +205,27 @@ fn renderScene(
 
     var total_triangles: u64 = 0;
     var drawn_triangles: u64 = 0;
+    var clipped_triangles: u64 = 0;
 
     for (object_list.*.items) |object| {
         for (object.triangles.items) |tri_v| {
             total_triangles += 1;
-            const c0 = vp.mulVec4(tri_v[0]);
-            const c1 = vp.mulVec4(tri_v[1]);
-            const c2 = vp.mulVec4(tri_v[2]);
+            var ca = [4]?math.Vec4{ // Array of vertexes
+                vp.mulVec4(tri_v[0]),
+                vp.mulVec4(tri_v[1]),
+                vp.mulVec4(tri_v[2]),
+                null // Incase the near face clipping gives us a fourth vertex (quad)
+            };
+            var cn: usize = 3; // Amount of vertexes that we have
+            var did_clip: bool = false; // Whether or not any triangles have been clipped
 
-            if (c0.w <= world_camera.near or c1.w <= world_camera.near or c2.w <= world_camera.near) continue;
+            if (ca[0].?.z <= world_camera.near or ca[1].?.z <= world_camera.near or ca[2].?.z <= world_camera.near) {
+                const x = render.nearPlaneClip(ca, world_camera.near);
+                ca = x[0];
+                cn = x[1];
+                did_clip = true;
+            }
+            if (cn < 3) continue; // Only continue if we have 3 or more vertexes
 
             const p0 = tri_v[0].toVec3();
             const p1 = tri_v[1].toVec3();
@@ -221,27 +233,34 @@ fn renderScene(
 
             const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
 
-            const v1 = c0.toPixel(fb.width, fb.height);
-            const v2 = c1.toPixel(fb.width, fb.height);
-            const v3 = c2.toPixel(fb.width, fb.height);
+            const v1 = ca[0].?.toPixel(fb.width, fb.height);
+            const v2 = ca[1].?.toPixel(fb.width, fb.height);
+            const v3 = ca[2].?.toPixel(fb.width, fb.height);
 
             if (render.facingAway(v1, v2, v3)) continue;
             const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
             const color2: u32 = render.multiplyRgb(color, tri_ilum);
+
             render.fillTriangle(v1, v2, v3, fb, zb, color2);
+            if (cn == 4) { // Draw the second triangle if the clipping resulted in a quad
+                const v4 = ca[3].?.toPixel(fb.width, fb.height);
+                render.fillTriangle(v1, v3, v4, fb, zb, color2);
+                drawn_triangles += 1;
+            }
             // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
 
             drawn_triangles += 1;
+            if (did_clip) clipped_triangles += cn - 2;
         }
     }
 
-    return .{ total_triangles, drawn_triangles };
+    return .{ total_triangles, drawn_triangles, clipped_triangles };
 }
 
 fn renderImGui(
     texture: *c.SDL_Texture,
     frame_times: *[graph_samples]f32,
-    triangles: struct { u64, u64 },
+    triangles: struct { u64, u64, u64 },
     world_camera: *render.Camera,
     app_state: *AppState,
     viewport_settings: *ViewportSettings,
@@ -300,6 +319,7 @@ fn renderImGui(
     if (c.ImGui_Begin("Render Metrics", null, 0)) {
         c.ImGui_Text("Total Triangles: %d", triangles[0]);
         c.ImGui_Text("Drawn Triangles: %d", triangles[1]);
+        c.ImGui_Text("Clipped Triangles: %d", triangles[2]);
     }
     c.ImGui_End();
 
