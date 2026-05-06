@@ -8,7 +8,7 @@ pub const Object = struct {
     z: f32,
 
     triangles: std.ArrayList([3]math.Vec4),
-    triangle_uvs: std.ArrayList([3][2]f32),
+    triangle_uvs: std.ArrayList([3]math.Vec2),
     triangle_groups: std.ArrayList(u32),
     allocator: *const std.mem.Allocator,
 
@@ -90,9 +90,9 @@ pub const Model = struct {
 pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Model {
     // Create arrays
     var vertexes: std.ArrayList(math.Vec4) = .empty;
-    var uvs: std.ArrayList([2]f32) = .empty;
+    var uvs: std.ArrayList(math.Vec2) = .empty;
     var faces: std.ArrayList([3]math.Vec4) = .empty;
-    var face_uvs: std.ArrayList([3][2]f32) = .empty;
+    var face_uvs: std.ArrayList(math.Vec2) = .empty;
     var face_groups: std.ArrayList(u32) = .empty;
     defer vertexes.deinit(allocator.*);
     defer uvs.deinit(allocator.*);
