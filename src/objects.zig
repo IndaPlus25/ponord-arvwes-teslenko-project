@@ -1,5 +1,13 @@
 const std = @import("std");
 const math = @import("math.zig");
+const render = @import("render.zig");
+
+// Import the yoinked image handler
+// https://github.com/nothings/stb/blob/master/stb_image.h
+const c = @cImport({
+    @cDefine("STB_IMAGE_IMPLEMENTATION", {});
+    @cInclude("stb_image.h");
+});
 
 // An object with a position
 pub const Object = struct {
@@ -10,6 +18,7 @@ pub const Object = struct {
     triangles: std.ArrayList([3]math.Vec4),
     triangle_uvs: std.ArrayList([3]math.Vec2),
     triangle_groups: std.ArrayList(u32),
+    textures: std.ArrayList(render.TextureBuffer),
     allocator: *const std.mem.Allocator,
 
     pub fn init(model: Model, allocator: *const std.mem.Allocator) !Object {
@@ -20,6 +29,7 @@ pub const Object = struct {
             .triangles = try model.triangles.clone(allocator.*),
             .triangle_uvs = try model.triangle_uvs.clone(allocator.*),
             .triangle_groups = try model.triangle_groups.clone(allocator.*),
+            .textures = model.textures,
             .allocator = allocator,
         };
     }
@@ -75,14 +85,19 @@ pub const Object = struct {
 // A loaded 3D model
 pub const Model = struct {
     triangles: std.ArrayList([3]math.Vec4),
-    triangle_uvs: std.ArrayList([3][2]f32),
+    triangle_uvs: std.ArrayList([3]math.Vec2),
     triangle_groups: std.ArrayList(u32),
+    textures: std.ArrayList(render.TextureBuffer),
     allocator: *const std.mem.Allocator,
 
     pub fn deinit(self: *Model) void {
         self.triangles.deinit(self.allocator.*);
         self.triangle_uvs.deinit(self.allocator.*);
         self.triangle_groups.deinit(self.allocator.*);
+        for (self.textures.items) |texture| {
+            self.allocator.free(texture.data);
+        }
+        self.textures.deinit(self.allocator.*);
     }
 };
 
@@ -94,8 +109,17 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
     var faces: std.ArrayList([3]math.Vec4) = .empty;
     var face_uvs: std.ArrayList(math.Vec2) = .empty;
     var face_groups: std.ArrayList(u32) = .empty;
+    var textures: std.ArrayList(render.TextureBuffer) = .empty;
+    var material_map = std.StringHashMap(u32).init(allocator.*);
     defer vertexes.deinit(allocator.*);
     defer uvs.deinit(allocator.*);
+    defer {
+        var key_it = material_map.keyIterator();
+        while (key_it.next()) |key_ptr| {
+            allocator.free(key_ptr.*);
+        }
+        material_map.deinit();
+    }
 
     var group_idx: u32 = 0;
 
@@ -159,8 +183,28 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
                 prev_v = curr_v;
                 prev_uv = curr_uv;
             }
-        } else if (std.mem.eql(u8, key, "usemtl")) { // new group
-            group_idx += 1;
+        } else if (std.mem.eql(u8, key, "usemtl")) { // new texture
+            const material_name = std.mem.trim(u8, str["usemtl".len..], " \n\r\t");
+
+            if (material_map.get(material_name)) |idx| {
+                group_idx = idx;
+            } else {
+                const png_path = try std.fmt.allocPrint(
+                    allocator.*,
+                    "models/Kokiri Forest/{s}.png",
+                    .{material_name},
+                );
+                defer allocator.free(png_path);
+
+                const texture = try loadTexture(png_path, allocator);
+
+                // Set current group index, e.g. second texture gets id 1
+                group_idx = @intCast(textures.items.len);
+                try textures.append(allocator.*, texture);
+
+                const material_key = try allocator.dupe(u8, material_name);
+                try material_map.put(material_key, group_idx);
+            }
         } else if (std.mem.eql(u8, key, "vt")) { // Parse for textures
             const u = try std.fmt.parseFloat(f32, iter.next().?);
             const v = try std.fmt.parseFloat(f32, iter.next().?);
@@ -175,6 +219,43 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
         .triangles = faces,
         .triangle_uvs = face_uvs,
         .triangle_groups = face_groups,
+        .textures = textures,
         .allocator = allocator,
+    };
+}
+
+pub fn loadTexture(path: []const u8, allocator: *const std.mem.Allocator) !render.TextureBuffer {
+    const z_path = try allocator.dupeZ(u8, path); // makes the string null terminated (for the c extension)
+    defer allocator.free(z_path);
+
+    var width: c_int = 0;
+    var height: c_int = 0;
+    var channels: c_int = 0;
+
+    const raw = c.stbi_load(z_path.ptr, &width, &height, &channels, 4) orelse {
+        std.debug.print("Failed to load texture: {s}\n", .{path});
+        return error.TextureLoadFailed;
+    };
+    defer c.stbi_image_free(raw);
+
+    const w: usize = @intCast(width);
+    const h: usize = @intCast(height);
+
+    const pixels = try allocator.alloc(u32, w * h);
+
+    for (pixels, 0..) |*pixel, i| {
+        const start = i * 4;
+        const r: u32 = raw[start + 0];
+        const g: u32 = raw[start + 1];
+        const b: u32 = raw[start + 2];
+        const a: u32 = raw[start + 3];
+        // R G B A gets packed in to a pixel
+        pixel.* = (r << 24) | (g << 16) | (b << 8) | a;
+    }
+
+    return .{
+        .data = pixels,
+        .width = w,
+        .height = h,
     };
 }
