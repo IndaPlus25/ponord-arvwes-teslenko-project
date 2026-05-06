@@ -246,6 +246,7 @@ pub fn fillTriangle(
     fb: FrameBuffer,
     zb: *ZBuffer,
     tb: TextureBuffer,
+    db: f32,
 ) void {
     // Find the smallest possible rectangle that the triangle fits inside,
     // only loop through the pixels in this rectangle to avoid unnecessary work.
@@ -315,11 +316,14 @@ pub fn fillTriangle(
             if (w0 * area >= 0 and w1 * area >= 0 and w2 * area >= 0) {
                 // Cursed expression to get the perspective correct depth at this pixel
                 const z = 1.0 / ((w0 * inv_z1 + w1 * inv_z2 + w2 * inv_z3) * inv_area);
+                // Dumb fix for z-fighting with road/path
+                const z_test = z - db;
+
                 const ux: usize = @intCast(px);
                 const uy: usize = @intCast(py);
                 // If the depth of whatever is at this pixel is bigger than what we want to draw,
                 // that means our new pixel is closer, so we draw it and update the buffer
-                if (zb.getDepth(ux, uy) > z) {
+                if (zb.getDepth(ux, uy) > z_test) {
                     const uPixel = z * (w0 * uv1.u * inv_z1 + w1 * uv2.u * inv_z2 + w2 * uv3.u * inv_z3) * inv_area;
                     const vPixel = z * (w0 * uv1.v * inv_z1 + w1 * uv2.v * inv_z2 + w2 * uv3.v * inv_z3) * inv_area;
 
@@ -328,7 +332,7 @@ pub fn fillTriangle(
 
                     if (alpha != 0) {
                         fb.setPixel(ux, uy, color);
-                        zb.setDepth(ux, uy, z);
+                        zb.setDepth(ux, uy, z_test);
                     }
                 }
             }

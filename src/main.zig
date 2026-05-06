@@ -179,6 +179,16 @@ fn updateMovement(world_camera: *render.Camera, delta: f32) void {
     world_camera.position = world_camera.position.add(velocity.mul(world_camera.move_speed * delta));
 }
 
+// TODO: Look into if there's a better solution than this...
+// We need depth bias to avoid z-fighting in these textures
+const depth_bias: f32 = 0.004;
+fn texDepthBias(texture_id: usize) f32 {
+    return switch (texture_id) {
+        8, 32, 36, 37 => depth_bias,
+        else => 0.0,
+    };
+}
+
 fn renderScene(
     fb: render.FrameBuffer,
     zb: *render.ZBuffer,
@@ -256,14 +266,15 @@ fn renderScene(
 
             const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
             const tb = object.textures.items[tex_id];
+            const db = texDepthBias(tex_id);
 
-            render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb);
+            render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb, db);
 
             if (cn == 4) {
                 const v4 = ca[3].?.toPixel(fb.width, fb.height);
                 const uv4 = cu[3].?;
 
-                render.fillTriangle(v1, v3, v4, uv1, uv3, uv4, fb, zb, tb);
+                render.fillTriangle(v1, v3, v4, uv1, uv3, uv4, fb, zb, tb, db);
                 drawn_triangles += 1;
             }
 
