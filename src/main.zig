@@ -185,7 +185,7 @@ fn renderScene(
     zb: *render.ZBuffer,
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
-    world_lighting: *const render.WorldLighting,
+    // world_lighting: *const render.WorldLighting,
 ) struct { u64, u64, u64 } {
     fb.clear();
 
@@ -218,19 +218,29 @@ fn renderScene(
         // TEMP: capture tri_index for random colors, remove this when adding textures
         for (object.triangles.items, 0..) |tri_v, tri_index| {
             total_triangles += 1;
+
             var ca = [4]?math.Vec4{ // Array of vertexes
                 vp.mulVec4(tri_v[0]),
                 vp.mulVec4(tri_v[1]),
                 vp.mulVec4(tri_v[2]),
-                null // Incase the near face clipping gives us a fourth vertex (quad)
+                null, // Incase the near face clipping gives us a fourth vertex (quad)
             };
+
+            var cu = [4]?math.Vec2{
+                object.triangle_uvs.items[tri_index][0],
+                object.triangle_uvs.items[tri_index][1],
+                object.triangle_uvs.items[tri_index][2],
+                null,
+            };
+
             var cn: usize = 3; // Amount of vertexes that we have
             var did_clip: bool = false; // Whether or not any triangles have been clipped
 
             if (ca[0].?.z <= world_camera.near or ca[1].?.z <= world_camera.near or ca[2].?.z <= world_camera.near) {
-                const x = render.nearPlaneClip(ca, world_camera.near);
+                const x = render.nearPlaneClip(ca, cu, world_camera.near);
                 ca = x[0];
-                cn = x[1];
+                cu = x[1];
+                cn = x[2];
                 did_clip = true;
             }
             if (cn < 3) continue; // Only continue if we have 3 or more vertexes
@@ -245,22 +255,14 @@ fn renderScene(
             const v2 = ca[1].?.toPixel(fb.width, fb.height);
             const v3 = ca[2].?.toPixel(fb.width, fb.height);
 
-            const uv1 = object.triangle_uvs.items[tri_index][0];
-            const uv2 = object.triangle_uvs.items[tri_index][1];
-            const uv3 = object.triangle_uvs.items[tri_index][2];
+            const uv1 = cu[0].?;
+            const uv2 = cu[1].?;
+            const uv3 = cu[2].?;
 
             // Skip triangles facing away
             if (render.facingAway(v1, v2, v3)) continue;
-            const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
-            const color2: u32 = render.multiplyRgb(color, tri_ilum);
-
-            render.fillTriangle(v1, v2, v3, fb, zb, color2);
-            if (cn == 4) { // Draw the second triangle if the clipping resulted in a quad
-                const v4 = ca[3].?.toPixel(fb.width, fb.height);
-                render.fillTriangle(v1, v3, v4, fb, zb, color2);
-                drawn_triangles += 1;
-            }
-            // render.drawTriangle(v1, v2, v3, fb, zb, 0x000000FF);
+            // const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
+            // const color2: u32 = render.multiplyRgb(color, tri_ilum);
 
             const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
             const tb = object.textures.items[tex_id];
@@ -269,9 +271,17 @@ fn renderScene(
             // const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
             // const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
 
-            // Rasterize
-            //TODO init Texture bufer and get triangle UVs
             render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb);
+
+            if (cn == 4) {
+                const v4 = ca[3].?.toPixel(fb.width, fb.height);
+                const uv4 = cu[3].?;
+
+                render.fillTriangle(v1, v3, v4, uv1, uv3, uv4, fb, zb, tb);
+                drawn_triangles += 1;
+            }
+
+            //TODO init Texture bufer and get triangle UVs
             drawn_triangles += 1;
             if (did_clip) clipped_triangles += cn - 2;
         }
