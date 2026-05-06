@@ -351,17 +351,17 @@ pub fn nearPlaneClip(c: [4]?Vec4, uv: [4]?Vec2, near_plane: f32) struct { [4]?Ve
         const curr_uv = uv[i].?;
         const next_uv = uv[(i + 1) % 3].?;
 
-        const curr_in = curr_c.z > near_plane;
-        const next_in = next_c.z > near_plane;
+        const curr_in = curr_c.w > near_plane;
+        const next_in = next_c.w > near_plane;
 
         if (curr_in != next_in) {
-            const t = (near_plane - curr_c.z) / (next_c.z - curr_c.z);
+            const t = (near_plane - curr_c.w) / (next_c.w - curr_c.w);
 
             new_c[cn] = Vec4{
                 .x = curr_c.x + t * (next_c.x - curr_c.x),
                 .y = curr_c.y + t * (next_c.y - curr_c.y),
-                .z = near_plane,
-                .w = curr_c.w + t * (next_c.w - curr_c.w),
+                .z = curr_c.z + t * (next_c.z - curr_c.z),
+                .w = near_plane,
             };
 
             new_uv[cn] = Vec2{

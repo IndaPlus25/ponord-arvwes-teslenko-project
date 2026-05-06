@@ -236,7 +236,7 @@ fn renderScene(
             var cn: usize = 3; // Amount of vertexes that we have
             var did_clip: bool = false; // Whether or not any triangles have been clipped
 
-            if (ca[0].?.z <= world_camera.near or ca[1].?.z <= world_camera.near or ca[2].?.z <= world_camera.near) {
+            if (ca[0].?.w <= world_camera.near or ca[1].?.w <= world_camera.near or ca[2].?.w <= world_camera.near) {
                 const x = render.nearPlaneClip(ca, cu, world_camera.near);
                 ca = x[0];
                 cu = x[1];

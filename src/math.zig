@@ -106,7 +106,7 @@ pub const Vec4 = struct {
         return .{
             .x = (self.x * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_w)),
             .y = (-self.y * inverse + 1) * 0.5 * @as(f32, @floatFromInt(fb_h)), // flipped sign because negative is up
-            .z = self.z,
+            .z = self.w,
         };
     }
 };
