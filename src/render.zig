@@ -17,8 +17,11 @@ pub const Camera = struct {
 };
 
 // wrap UVs to [0, 1] so textures repeat
-fn repeatWrap(value: f32) f32 {
-    return value - @floor(value);
+// every second repetition is flipped (our obj expects this)
+fn mirrorWrap(value: f32) f32 {
+    const wrapped = value - @floor(value);
+    const tile: i32 = @intFromFloat(@floor(value));
+    return if (@mod(tile, 2) == 0) wrapped else 1.0 - wrapped;
 }
 
 // gets one 8-bit channel from a packed RGBA (u32)
@@ -26,7 +29,7 @@ fn repeatWrap(value: f32) f32 {
 // shift = 16 green
 // shift = 8 blue
 // shift = 0 alpha
-fn colorChannel(color: u32, shift: u8) f32 {
+fn colorChannel(color: u32, shift: u5) f32 {
     return @floatFromInt((color >> shift) & 0xff);
 }
 
@@ -79,21 +82,34 @@ pub const TextureBuffer = struct {
     height: usize,
 
     pub fn getColor(self: TextureBuffer, u: f32, v: f32) u32 {
-        const u_wrapped = repeatWrap(u);
-        const v_wrapped = 1.0 - repeatWrap(v);
+        // convert uv to (repeated) texture position
+        // also flip V because obj assumes different orientation
+        const x = mirrorWrap(u) * @as(f32, @floatFromInt(self.width - 1));
+        const y = (1.0 - mirrorWrap(v)) * @as(f32, @floatFromInt(self.height - 1));
 
-        const x: usize = @min(
-            @as(usize, @intFromFloat(u_wrapped * @as(f32, @floatFromInt(self.width)))),
-            self.width - 1,
-        );
+        // find texture pixel above/left of sample point
+        const left: usize = @intFromFloat(@floor(x));
+        const top: usize = @intFromFloat(@floor(y));
 
-        const y: usize = @min(
-            @as(usize, @intFromFloat(v_wrapped * @as(f32, @floatFromInt(self.height)))),
-            self.height - 1,
-        );
+        // find texture pixel below/right of sample point
+        const right = @min(left + 1, self.width - 1);
+        const bottom = @min(top + 1, self.height - 1);
 
-        const index = x + (y * self.width);
-        return self.data[index];
+        // fractional pos inside 2x2 pixel area (for blend weights)
+        const blend_x = x - @floor(x);
+        const blend_y = y - @floor(y);
+
+        // index = row * width + column
+        const top_row = top * self.width;
+        const bottom_row = bottom * self.width;
+
+        const top_left = self.data[top_row + left];
+        const top_right = self.data[top_row + right];
+        const bottom_left = self.data[bottom_row + left];
+        const bottom_right = self.data[bottom_row + right];
+
+        // blend the neighboring pixels into one color
+        return sampleBilinearColor(top_left, top_right, bottom_left, bottom_right, blend_x, blend_y);
     }
 };
 
