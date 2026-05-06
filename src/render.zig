@@ -16,9 +16,61 @@ pub const Camera = struct {
     far: f32 = 240.0, // distance to far plane
 };
 
+// wrap UVs to [0, 1] so textures repeat
 fn repeatWrap(value: f32) f32 {
-    // wrap UVs to [0, 1] so textures repeat
     return value - @floor(value);
+}
+
+// gets one 8-bit channel from a packed RGBA (u32)
+// shift = 24 red
+// shift = 16 green
+// shift = 8 blue
+// shift = 0 alpha
+fn colorChannel(color: u32, shift: u8) f32 {
+    return @floatFromInt((color >> shift) & 0xff);
+}
+
+// takes 4 channels and packs it into RGBA
+// clamps each channel to [0, 255]
+fn packRgba(r: f32, g: f32, b: f32, a: f32) u32 {
+    const red: u32 = @intFromFloat(std.math.clamp(r, 0.0, 255.0));
+    const green: u32 = @intFromFloat(std.math.clamp(g, 0.0, 255.0));
+    const blue: u32 = @intFromFloat(std.math.clamp(b, 0.0, 255.0));
+    const alpha: u32 = @intFromFloat(std.math.clamp(a, 0.0, 255.0));
+    return (red << 24) | (green << 16) | (blue << 8) | alpha;
+}
+
+// lerp between two colors to mix them
+// amt = 0.0 gives color a
+// amt = 1.0 gives color b
+// amt = 0.5 gives a mix of a, b
+fn mixColor(a: u32, b: u32, amt: f32) u32 {
+    const t = std.math.clamp(amt, 0.0, 1.0);
+
+    // a + (b - a) * t is the lerp formula
+    return packRgba(
+        colorChannel(a, 24) + (colorChannel(b, 24) - colorChannel(a, 24)) * t,
+        colorChannel(a, 16) + (colorChannel(b, 16) - colorChannel(a, 16)) * t,
+        colorChannel(a, 8) + (colorChannel(b, 8) - colorChannel(a, 8)) * t,
+        colorChannel(a, 0) + (colorChannel(b, 0) - colorChannel(a, 0)) * t,
+    );
+}
+
+// bilinear interpolation between 4 neighbouring pixels
+fn sampleBilinearColor(
+    top_left: u32,
+    top_right: u32,
+    bottom_left: u32,
+    bottom_right: u32,
+    blend_x: f32,
+    blend_y: f32,
+) u32 {
+    // blend top row horizontally
+    // blend bottom row horizontally
+    // blend those vertically
+    const top = mixColor(top_left, top_right, blend_x);
+    const bottom = mixColor(bottom_left, bottom_right, blend_x);
+    return mixColor(top, bottom, blend_y);
 }
 
 pub const TextureBuffer = struct {
