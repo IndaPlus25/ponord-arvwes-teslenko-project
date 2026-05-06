@@ -6,14 +6,14 @@ const Vec4 = math.Vec4;
 
 pub const Camera = struct {
     position: Vec3 = .{ .x = 0, .y = 0, .z = 0 }, // initial world pos
-    yaw: f32 = -std.math.pi / 2.0, // rotation around the up vector (left/right) in radians
-    pitch: f32 = 0, // rotation around the camera right axis (up/down) in radians
-    sensitivity: f32 = 0.002, // mouse sensitivity
-    move_speed: f32 = 3.0, // move speed
+    yaw: f32 = 0.0, // rotation around the up vector (left/right) in radians
+    pitch: f32 = 0.0, // rotation around the camera right axis (up/down) in radians
+    sensitivity: f32 = 0.0018, // mouse sensitivity
+    move_speed: f32 = 12.0, // move speed
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
-    fov: f32 = 50, // field of view in degrees
-    near: f32 = 1.0, // distance to near plane
-    far: f32 = 200.0, // distance to far plane
+    fov: f32 = 60.0, // field of view in degrees
+    near: f32 = 0.2, // distance to near plane
+    far: f32 = 240.0, // distance to far plane
 };
 
 // Helper for mirrored textures
@@ -278,8 +278,12 @@ pub fn fillTriangle(
     const dw2_dx = v1.y - v2.y;
     const dw2_dy = v2.x - v1.x;
 
-    // Start at the top left corner of the bounding box
-    const start = Vec3{ .x = @floatFromInt(min_x), .y = @floatFromInt(min_y), .z = 0 };
+    // Start at the top left corner of the bounding box with pixel offset
+    const start = Vec3{
+        .x = @as(f32, @floatFromInt(min_x)) + 0.5,
+        .y = @as(f32, @floatFromInt(min_y)) + 0.5,
+        .z = 0,
+    };
 
     // Get the edgeFunction values at starting pixel, all of these have to match the sign
     // of area for us to draw the pixel, otherwise it's not inside the triangle

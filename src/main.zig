@@ -416,12 +416,15 @@ pub fn main() !void {
 
     // Load models
     var kokiri_model = try objects.loadModel("models/Kokiri Forest/Kokiri Forest.obj", &allocator);
+
+    const world_scale: f32 = 0.02;
+
     // Scale down the world
     for (kokiri_model.triangles.items) |*tri| {
         for (0..3) |i| {
-            tri[i].x *= 0.01;
-            tri[i].y *= 0.01;
-            tri[i].z *= 0.01;
+            tri[i].x *= world_scale;
+            tri[i].y *= world_scale;
+            tri[i].z *= world_scale;
         }
     }
     defer kokiri_model.deinit();
