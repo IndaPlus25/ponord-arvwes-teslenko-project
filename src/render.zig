@@ -16,10 +16,9 @@ pub const Camera = struct {
     far: f32 = 240.0, // distance to far plane
 };
 
-// Helper for mirrored textures
-fn mirrorWrap(x: f32) f32 {
-    const t = x - @floor(x / 2.0) * 2.0;
-    return if (t < 1.0) t else 2.0 - t;
+fn repeatWrap(value: f32) f32 {
+    // wrap UVs to [0, 1] so textures repeat
+    return value - @floor(value);
 }
 
 pub const TextureBuffer = struct {
@@ -27,9 +26,9 @@ pub const TextureBuffer = struct {
     width: usize,
     height: usize,
 
-    pub fn getColor(self: TextureBuffer, U: f32, V: f32) u32 {
-        const u_wrapped = mirrorWrap(U);
-        const v_wrapped = 1.0 - mirrorWrap(V);
+    pub fn getColor(self: TextureBuffer, u: f32, v: f32) u32 {
+        const u_wrapped = repeatWrap(u);
+        const v_wrapped = 1.0 - repeatWrap(v);
 
         const x: usize = @min(
             @as(usize, @intFromFloat(u_wrapped * @as(f32, @floatFromInt(self.width)))),
@@ -44,19 +43,15 @@ pub const TextureBuffer = struct {
         const index = x + (y * self.width);
         return self.data[index];
     }
-
-    pub fn clear(self: TextureBuffer) void {
-        @memset(self.data, 0);
-    }
 };
 
+// TODO: Vertex lighting instead of per triangle?
 pub const WorldLighting = struct {
     ambient: f32 = 0.3,
     light_sources: []const LightSource,
     pub fn SkyDirection() Vec3 {
         return .{ .x = 0, .y = 1, .z = 0 };
     }
-    //returns a scalefactor 0..=1 based on avg brightnes on the given triangle
     pub fn triangleIlum(self: WorldLighting, v1: Vec3, v2: Vec3, v3: Vec3) f32 {
         var total: f32 = 0;
 
@@ -163,61 +158,6 @@ pub const ZBuffer = struct {
         self.height = new_h;
     }
 };
-
-pub fn drawTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
-    drawLine(v1, v2, fb, zb, color);
-    drawLine(v1, v3, fb, zb, color);
-    drawLine(v2, v3, fb, zb, color);
-}
-
-fn floatToPixel(v: f32) isize {
-    return @as(isize, @intFromFloat(@round(v)));
-}
-
-pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
-    var x0: isize = (floatToPixel(start.x));
-    var y0: isize = (floatToPixel(start.y));
-    var z0: f32 = start.z;
-    const x1: isize = (floatToPixel(end.x));
-    const y1: isize = (floatToPixel(end.y));
-    const z1: f32 = end.z;
-
-    const dx: isize = @as(isize, @intCast(@abs(x1 - x0)));
-    const dy: isize = -@as(isize, @intCast(@abs(y1 - y0)));
-    const dz: f32 = z1 - z0;
-
-    const sx: isize = if (x0 < x1) 1 else -1;
-    const sy: isize = if (y0 < y1) 1 else -1;
-
-    var err = dx + dy;
-
-    const steps: f32 = @floatFromInt(if (dx >= -dy) dx else -dy);
-    const dz_dsteps: f32 = if (steps > 0) dz / steps else 0.0;
-
-    while (true) {
-        if (x0 >= 0 and y0 >= 0 and x0 < fb.width and y0 < fb.height) {
-            const ux0: usize = @intCast(x0);
-            const uy0: usize = @intCast(y0);
-            if (zb.getDepth(ux0, uy0) > z0) {
-                fb.setPixel(ux0, uy0, color);
-                zb.setDepth(ux0, uy0, z0);
-            }
-        }
-
-        const e2 = 2 * err;
-        if (e2 >= dy) {
-            if (x0 == x1) break;
-            err += dy;
-            x0 += sx;
-        }
-        if (e2 <= dx) {
-            if (y0 == y1) break;
-            err += dx;
-            y0 += sy;
-        }
-        z0 += dz_dsteps;
-    }
-}
 
 // This is equivalent to the z component of the cross product (b-a) x (c-a), by the right hand rule
 // we can see that either z points "into" the screen, or out, if it's pointing away from the camera we don't render it

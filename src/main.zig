@@ -5,7 +5,6 @@ const render = @import("render.zig");
 const math = @import("math.zig");
 const objects = @import("objects.zig");
 
-const Model = objects.Model;
 const Object = objects.Object;
 
 const c = @cImport({
@@ -185,7 +184,6 @@ fn renderScene(
     zb: *render.ZBuffer,
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
-    // world_lighting: *const render.WorldLighting,
 ) struct { u64, u64, u64 } {
     fb.clear();
 
@@ -245,12 +243,6 @@ fn renderScene(
             }
             if (cn < 3) continue; // Only continue if we have 3 or more vertexes
 
-            // // Compute lighting in world space
-            // const p0 = tri_v[0].toVec3();
-            // const p1 = tri_v[1].toVec3();
-            // const p2 = tri_v[2].toVec3();
-            // const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
-
             const v1 = ca[0].?.toPixel(fb.width, fb.height);
             const v2 = ca[1].?.toPixel(fb.width, fb.height);
             const v3 = ca[2].?.toPixel(fb.width, fb.height);
@@ -261,15 +253,9 @@ fn renderScene(
 
             // Skip triangles facing away
             if (render.facingAway(v1, v2, v3)) continue;
-            // const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
-            // const color2: u32 = render.multiplyRgb(color, tri_ilum);
 
             const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
             const tb = object.textures.items[tex_id];
-
-            // Apply lighting
-            // const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
-            // const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
 
             render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb);
 
@@ -281,7 +267,6 @@ fn renderScene(
                 drawn_triangles += 1;
             }
 
-            //TODO init Texture bufer and get triangle UVs
             drawn_triangles += 1;
             if (did_clip) clipped_triangles += cn - 2;
         }
@@ -362,14 +347,7 @@ fn renderImGui(
 
         c.ImGui_Separator();
 
-        var frame_counter: u32 = 0;
-        frame_counter += 1;
-        if (frame_counter >= 4) {
-            frame_counter = 0;
-        }
-
         c.ImGui_PlotLines("Frame Times", frame_times, graph_samples);
-
         c.ImGui_Text("Avg Frame Time: %.2f ms", avg_delay);
     }
     c.ImGui_End();
@@ -442,13 +420,6 @@ pub fn main() !void {
     var world_camera = render.Camera{
         .position = .{ .x = 3, .y = 2, .z = 6 },
     };
-
-    // const light_sources = [_]render.LightSource{
-    // .{ .SkyLight = .{ .brightness = 1 } },
-    // .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
-    // };
-
-    // const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
 
     // Performance variables
     const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
