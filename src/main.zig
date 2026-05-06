@@ -214,42 +214,15 @@ fn renderScene(
                 vp.mulVec4(tri_v[0]),
                 vp.mulVec4(tri_v[1]),
                 vp.mulVec4(tri_v[2]),
-                null
+                null // Incase the near face clipping gives us a fourth vertex (quad)
             };
-            var cn: usize = 3; // Amount of vertexes that should be drawn
+            var cn: usize = 3; // Amount of vertexes that we have
             var did_clip: bool = false; // Whether or not any triangles have been clipped
 
-            // TODO: Move into its own function? If so, where?
             if (ca[0].?.z <= world_camera.near or ca[1].?.z <= world_camera.near or ca[2].?.z <= world_camera.near) {
-                cn = 0;
-                var new_ca: [4]?math.Vec4 = undefined;
-
-                for (0..3) |i| {
-                    const curr_c = ca[i].?;
-                    const next_c = ca[(i + 1) % 3].?;
-
-                    const curr_in = curr_c.z > world_camera.near; 
-                    const next_in = next_c.z > world_camera.near; 
-
-                    if (curr_in != next_in) {
-                        const t = curr_c.z / (curr_c.z - next_c.z);
-                        const intersect = math.Vec4{ // The intersection point
-                            .x = curr_c.x + t * (next_c.x - curr_c.x),
-                            .y = curr_c.y + t * (next_c.y - curr_c.y),
-                            .z = world_camera.near,
-                            .w = curr_c.w + t * (next_c.w - curr_c.w), // TODO: Can maybe be set to world_camer.near for the same result? Unless I'm missing something
-                        };
-                        new_ca[cn] = intersect;
-                        cn += 1;
-                    }
-
-                    if (next_in) {
-                        new_ca[cn] = next_c;
-                        cn += 1;
-                    }
-                }
-
-                ca = new_ca;
+                const x = render.nearPlaneClip(ca, world_camera.near);
+                ca = x[0];
+                cn = x[1];
                 did_clip = true;
             }
             if (cn < 3) continue; // Only continue if we have 3 or more vertexes
