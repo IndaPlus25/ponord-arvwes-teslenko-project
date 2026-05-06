@@ -101,7 +101,7 @@ pub const ZBuffer = struct {
     }
 
     pub fn clear(self: ZBuffer) void {
-        @memset(self.data, 1.0);
+        @memset(self.data, 20000.0);  // Should be the same as Camera.far, or larger
     }
 
     pub fn deinit(self: ZBuffer) void {
