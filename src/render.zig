@@ -17,7 +17,7 @@ pub const Camera = struct {
 };
 
 pub const TextureBuffer = struct {
-    data: []u8,
+    data: []u32,
     width: usize,
     height: usize,
 
