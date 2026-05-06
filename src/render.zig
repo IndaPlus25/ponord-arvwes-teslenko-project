@@ -16,16 +16,31 @@ pub const Camera = struct {
     far: f32 = 200.0, // distance to far plane
 };
 
+// Helper for mirrored textures
+fn mirrorWrap(x: f32) f32 {
+    const t = x - @floor(x / 2.0) * 2.0;
+    return if (t < 1.0) t else 2.0 - t;
+}
+
 pub const TextureBuffer = struct {
     data: []u32,
     width: usize,
     height: usize,
 
     pub fn getColor(self: TextureBuffer, U: f32, V: f32) u32 {
-        const u_wrapped: f32 = U - @floor(U);
-        const v_wrapped: f32 = V - @floor(V);
-        const x: usize = @intFromFloat(u_wrapped * @as(f32, @floatFromInt(self.width - 1)));
-        const y: usize = @intFromFloat(v_wrapped * @as(f32, @floatFromInt(self.height - 1)));
+        const u_wrapped = mirrorWrap(U);
+        const v_wrapped = 1.0 - mirrorWrap(V);
+
+        const x: usize = @min(
+            @as(usize, @intFromFloat(u_wrapped * @as(f32, @floatFromInt(self.width)))),
+            self.width - 1,
+        );
+
+        const y: usize = @min(
+            @as(usize, @intFromFloat(v_wrapped * @as(f32, @floatFromInt(self.height)))),
+            self.height - 1,
+        );
+
         const index = x + (y * self.width);
         return self.data[index];
     }
