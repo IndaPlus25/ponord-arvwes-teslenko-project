@@ -3,20 +3,28 @@ const std = @import("std");
 pub const Vec2 = struct {
     u: f32,
     v: f32,
+
     pub fn add(self: Vec2, other: Vec2) Vec2 {
-        return .{ .x = self.x + other.x, .y = self.y + other.y };
+        return .{ .u = self.u + other.u, .v = self.v + other.v };
     }
 
-    pub fn sub(self: Vec2, other: Vec3) Vec2 {
-        return .{ .x = self.x - other.x, .y = self.y - other.y };
+    pub fn sub(self: Vec2, other: Vec2) Vec2 {
+        return .{ .u = self.u - other.u, .v = self.v - other.v };
     }
 
     pub fn mul(self: Vec2, scalar: f32) Vec2 {
-        return .{ .x = self.x * scalar, .y = self.y * scalar };
+        return .{ .u = self.u * scalar, .v = self.v * scalar };
     }
 
     pub fn dot(self: Vec2, other: Vec2) f32 {
-        return (self.x * other.x) + (self.y * other.y);
+        return self.u * other.u + self.v * other.v;
+    }
+
+    pub fn lerp(a: Vec2, b: Vec2, t: f32) Vec2 {
+        return .{
+            .u = a.u + (b.u - a.u) * t,
+            .v = a.v + (b.v - a.v) * t,
+        };
     }
 };
 
