@@ -217,7 +217,7 @@ fn renderScene(
             };
             var cn: usize = 3; // Amount of vertexes that should be drawn
 
-            if (ca[0].?.z <= 0 or ca[1].?.z <= 0 or ca[2].?.z <= 0) {
+            if (ca[0].?.z <= world_camera.near or ca[1].?.z <= world_camera.near or ca[2].?.z <= world_camera.near) {
                 cn = 0;
                 var new_ca: [4]?math.Vec4 = undefined;
 
@@ -225,16 +225,16 @@ fn renderScene(
                     const curr_c = ca[i].?;
                     const next_c = ca[(i + 1) % 3].?;
 
-                    const curr_in = curr_c.z > 0; 
-                    const next_in = next_c.z > 0; 
+                    const curr_in = curr_c.z > world_camera.near; 
+                    const next_in = next_c.z > world_camera.near; 
 
                     if (curr_in != next_in) {
                         const t = curr_c.z / (curr_c.z - next_c.z);
                         const intersect = math.Vec4{ // The intersection point
                             .x = curr_c.x + t * (next_c.x - curr_c.x),
                             .y = curr_c.y + t * (next_c.y - curr_c.y),
-                            .z = 0,
-                            .w = curr_c.w + t * (next_c.w - curr_c.w),
+                            .z = world_camera.near,
+                            .w = curr_c.w + t * (next_c.w - curr_c.w), // TODO: Can maybe be set to world_camer.near for the same result? Unless I'm missing something
                         };
                         new_ca[cn] = intersect;
                         cn += 1;
