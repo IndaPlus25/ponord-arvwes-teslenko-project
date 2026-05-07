@@ -22,6 +22,9 @@ const screen_width: c_int = 1920;
 const screen_height: c_int = 1080;
 const screen_title: [*c]const u8 = "working-title";
 
+const n64_fb_width: c_int = 320;
+const n64_fb_height: c_int = 240;
+
 const graph_samples: usize = 120; // Amount of data points to display in graphs
 
 const SdlContext = struct {
@@ -47,7 +50,7 @@ const SdlContext = struct {
             new_w,
             new_h,
         ) orelse return error.SdlCreateTextureFailed;
-        _ = c.SDL_SetTextureScaleMode(new_tex, c.SDL_SCALEMODE_NEAREST);
+        _ = c.SDL_SetTextureScaleMode(new_tex, c.SDL_SCALEMODE_LINEAR);
         self.texture = new_tex;
         self.fb_width = new_w;
         self.fb_height = new_h;
@@ -61,6 +64,7 @@ const AppState = struct {
 
 const ViewportSettings = struct {
     render_scale: f32 = 0.25,
+    fixed_res: bool = true,
 };
 
 fn initSdl(fb_w: c_int, fb_h: c_int) !SdlContext {
@@ -89,7 +93,7 @@ fn initSdl(fb_w: c_int, fb_h: c_int) !SdlContext {
         return error.SdlCreateTextureFailed;
     };
 
-    _ = c.SDL_SetTextureScaleMode(texture, c.SDL_SCALEMODE_NEAREST);
+    _ = c.SDL_SetTextureScaleMode(texture, c.SDL_SCALEMODE_LINEAR);
 
     return SdlContext{
         .window = window.?,
@@ -321,13 +325,30 @@ fn renderImGui(
         }
 
         const avail = c.ImGui_GetContentRegionAvail();
-        desired_w = @max(1, @as(c_int, @intFromFloat(avail.x * viewport_settings.render_scale)));
-        desired_h = @max(1, @as(c_int, @intFromFloat(avail.y * viewport_settings.render_scale)));
+
+        if (viewport_settings.fixed_res) {
+            desired_w = n64_fb_width;
+            desired_h = n64_fb_height;
+        } else {
+            desired_w = @max(1, @as(c_int, @intFromFloat(avail.x * viewport_settings.render_scale)));
+            desired_h = @max(1, @as(c_int, @intFromFloat(avail.y * viewport_settings.render_scale)));
+        }
+
+        // Letterbox in fixed res mode
+        const aspect = @as(f32, @floatFromInt(desired_w)) / @as(f32, @floatFromInt(desired_h));
+        var image_size = avail;
+
+        // Clamp
+        if (image_size.x / image_size.y > aspect) {
+            image_size.x = image_size.y * aspect;
+        } else {
+            image_size.y = image_size.x / aspect;
+        }
 
         c.ImGui_Image(c.struct_ImTextureRef_t{
             ._TexData = null,
             ._TexID = @intFromPtr(texture),
-        }, avail);
+        }, image_size);
     }
     c.ImGui_End();
 
@@ -355,6 +376,7 @@ fn renderImGui(
         }
 
         if (c.ImGui_CollapsingHeader("Post Processing", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_Checkbox("Fixed N64 Res", &viewport_settings.fixed_res);
             _ = c.ImGui_InputFloat("Render Scale", &viewport_settings.render_scale);
         }
     }
@@ -397,8 +419,8 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator; // TODO Maybe move into a global variable, and look into using a more efficient allocator for our intents and purposes
 
     var viewport_settings = ViewportSettings{};
-    const initial_fb_w: c_int = 640;
-    const initial_fb_h: c_int = 480;
+    const initial_fb_w: c_int = n64_fb_width;
+    const initial_fb_h: c_int = n64_fb_height;
     var sdl_context = try initSdl(initial_fb_w, initial_fb_h);
     defer c.SDL_Quit();
     defer sdl_context.deinit();
