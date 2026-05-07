@@ -33,8 +33,6 @@ pub fn renderScene(
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
 ) struct { u64, u64, u64 } {
-    render.drawSky(fb);
-
     // Construct the camera's forward direction (spherical coordinates, y is polar axis)
     const forward = math.Vec3{
         .x = @cos(world_camera.pitch) * @sin(world_camera.yaw),
@@ -128,6 +126,8 @@ pub fn renderScene(
             if (did_clip) clipped_triangles += cn - 2;
         }
     }
+
+    render.drawSky(fb, zb);
 
     return .{ total_triangles, drawn_triangles, clipped_triangles };
 }

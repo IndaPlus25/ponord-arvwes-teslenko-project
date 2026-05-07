@@ -86,9 +86,13 @@ pub fn main() !void {
             .width = sdl_context.fb_width,
             .height = sdl_context.fb_height,
         };
+
         zb.clear();
-        // TODO: Add back lighting
+
         const triangles = scene_renderer.renderScene(fb, &zb, &scene.objects, &world_camera);
+
+        render.quantizeFramebuffer(fb);
+
         _ = c.SDL_UnlockTexture(sdl_context.texture);
 
         // Present texture & draw imgui
