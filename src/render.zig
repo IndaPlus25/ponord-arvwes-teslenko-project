@@ -16,8 +16,13 @@ pub const Camera = struct {
     far: f32 = 240.0, // distance to far plane
 };
 
+// TODO: Add these to ImGui so we can play with values
+// TODO: Maybe put these in a struct?
 const sky_color: u32 = 0xb8bd7cff;
 const sky_horizon_color: u32 = 0xd4cf91ff;
+const fog_color: u32 = 0xb8b878ff;
+const fog_start: f32 = 10.0;
+const fog_end: f32 = 120.0;
 
 // wrap UVs to [0, 1] so textures repeat
 // every second repetition is flipped (our obj expects this)
@@ -117,6 +122,14 @@ pub fn drawSky(fb: FrameBuffer) void {
             fb.data[y * fb.stride + x] = color;
         }
     }
+}
+
+// Fade pixels far away for fog effect
+fn addFog(color: u32, depth: f32) u32 {
+    if (depth <= fog_start) return color;
+    if (depth >= fog_end) return fog_color;
+    const fog_amt = (depth - fog_start) / (fog_end - fog_start);
+    return mixColor(color, fog_color, fog_amt);
 }
 
 pub const TextureBuffer = struct {
@@ -374,10 +387,13 @@ pub fn fillTriangle(
                     const color = tb.getColor(uPixel, vPixel);
                     const alpha = color & 0xff;
 
-                    const final_color = if (should_tint_grayscale)
+                    var final_color = if (should_tint_grayscale)
                         tintGrayscale(color, 0x4b4724ff, 0xb0a85cff)
                     else
                         color;
+
+                    // NOTE: Don't use z_test here, we need the original z distance
+                    final_color = addFog(final_color, z);
 
                     if (alpha > 127) {
                         fb.setPixel(ux, uy, final_color);
