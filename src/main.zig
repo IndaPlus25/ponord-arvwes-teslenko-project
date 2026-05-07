@@ -204,7 +204,7 @@ fn renderScene(
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
 ) struct { u64, u64, u64 } {
-    fb.clear();
+    render.drawSky(fb);
 
     // Construct the camera's forward direction (spherical coordinates, y is polar axis)
     const forward = math.Vec3{

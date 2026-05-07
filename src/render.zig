@@ -16,6 +16,9 @@ pub const Camera = struct {
     far: f32 = 240.0, // distance to far plane
 };
 
+const sky_color: u32 = 0xb8bd7cff;
+const sky_horizon_color: u32 = 0xd4cf91ff;
+
 // wrap UVs to [0, 1] so textures repeat
 // every second repetition is flipped (our obj expects this)
 fn mirrorWrap(value: f32) f32 {
@@ -95,6 +98,25 @@ fn tintGrayscale(color: u32, dark: u32, light: u32) u32 {
         colorChannel(tint, 8),
         a,
     );
+}
+
+// Adds a basic sky gradient, doesn't touch the z-buffer so shouldn't mess with anything
+pub fn drawSky(fb: FrameBuffer) void {
+    const width: usize = @intCast(fb.width);
+    const height: usize = @intCast(fb.height);
+    const max_y: f32 = @floatFromInt(if (height > 1) height - 1 else 1);
+
+    var y: usize = 0;
+    while (y < height) : (y += 1) {
+        // 1.0 is top of screen, 0.0 bottom
+        const t = @as(f32, @floatFromInt(y)) / max_y;
+        const color = mixColor(sky_color, sky_horizon_color, t);
+
+        var x: usize = 0;
+        while (x < width) : (x += 1) {
+            fb.data[y * fb.stride + x] = color;
+        }
+    }
 }
 
 pub const TextureBuffer = struct {
