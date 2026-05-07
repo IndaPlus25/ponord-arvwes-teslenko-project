@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Pontus Nordström, Michael Teslenko, Arvid Westman
+// SPDX-License-Identifier: MIT
+
 const std = @import("std");
 
 pub const Vec2 = struct {

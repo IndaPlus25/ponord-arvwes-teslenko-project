@@ -1,14 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Pontus Nordström, Michael Teslenko, Arvid Westman
+// SPDX-License-Identifier: MIT
+
 const std = @import("std");
 const math = @import("math.zig");
 const render = @import("render.zig");
+const c = @import("c.zig").c;
 
-// Import the yoinked image handler
-// https://github.com/nothings/stb/blob/master/stb_image.h
-const c = @cImport({
-    @cInclude("stb_image.h");
-});
-
-// An object with a position
 pub const Object = struct {
     x: f32,
     y: f32,
@@ -190,7 +187,7 @@ pub fn loadModel(file_path: []const u8, allocator: *const std.mem.Allocator) !Mo
             } else {
                 const png_path = try std.fmt.allocPrint(
                     allocator.*,
-                    "models/Kokiri Forest/{s}.png",
+                    "assets/models/Kokiri Forest/{s}.png",
                     .{material_name},
                 );
                 defer allocator.free(png_path);

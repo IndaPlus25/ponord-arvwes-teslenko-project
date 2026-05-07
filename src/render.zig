@@ -1,5 +1,9 @@
+// SPDX-FileCopyrightText: 2026 Pontus Nordström, Michael Teslenko, Arvid Westman
+// SPDX-License-Identifier: MIT
+
 const std = @import("std");
 const math = @import("math.zig");
+
 const Vec2 = math.Vec2;
 const Vec3 = math.Vec3;
 const Vec4 = math.Vec4;
@@ -108,8 +112,18 @@ fn quantizeColor(color: u32, x: usize, y: usize, use_dither: bool) u32 {
     );
 }
 
-// bilinear interpolation between 4 neighbouring pixels
-fn sampleBilinearColor(
+// blend three colors
+fn blendColors(a: u32, b: u32, c: u32, wa: f32, wb: f32, wc: f32) u32 {
+    return packRgba(
+        colorChannel(a, 24) * wa + colorChannel(b, 24) * wb + colorChannel(c, 24) * wc,
+        colorChannel(a, 16) * wa + colorChannel(b, 16) * wb + colorChannel(c, 16) * wc,
+        colorChannel(a, 8) * wa + colorChannel(b, 8) * wb + colorChannel(c, 8) * wc,
+        colorChannel(a, 0) * wa + colorChannel(b, 0) * wb + colorChannel(c, 0) * wc,
+    );
+}
+
+// three point filtering like the N64 did it (not exactly but kinda)
+fn sampleThreePointColor(
     top_left: u32,
     top_right: u32,
     bottom_left: u32,
@@ -117,30 +131,50 @@ fn sampleBilinearColor(
     blend_x: f32,
     blend_y: f32,
 ) u32 {
-    // blend top row horizontally
-    // blend bottom row horizontally
-    // blend those vertically
-    const top = mixColor(top_left, top_right, blend_x);
-    const bottom = mixColor(bottom_left, bottom_right, blend_x);
-    return mixColor(top, bottom, blend_y);
+    if (blend_x + blend_y < 1.0) {
+        return blendColors(
+            top_left,
+            top_right,
+            bottom_left,
+            1.0 - blend_x - blend_y,
+            blend_x,
+            blend_y,
+        );
+    } else {
+        return blendColors(
+            bottom_right,
+            top_right,
+            bottom_left,
+            blend_x + blend_y - 1.0,
+            1.0 - blend_y,
+            1.0 - blend_x,
+        );
+    }
 }
 
 // Adds a basic sky gradient, doesn't touch the z-buffer so shouldn't mess with anything
-pub fn drawSky(fb: FrameBuffer) void {
+pub fn drawSky(fb: FrameBuffer, zb: *const ZBuffer) void {
     const width: usize = @intCast(fb.width);
     const height: usize = @intCast(fb.height);
+
     const max_y: f32 = @floatFromInt(if (height > 1) height - 1 else 1);
 
     var y: usize = 0;
     while (y < height) : (y += 1) {
-        // 1.0 is top of screen, 0.0 bottom
+        // 1.0 is bottom of screen, 0.0 top
         const t = @as(f32, @floatFromInt(y)) / max_y;
         const color = mixColor(sky_color, sky_horizon_color, t);
 
+        const fb_row = y * fb.stride;
+        const zb_row = y * zb.width;
+
         var x: usize = 0;
         while (x < width) : (x += 1) {
-            // TODO: Add param to function to enable/disable dither
-            fb.data[y * fb.stride + x] = quantizeColor(color, x, y, true);
+            // if zbuffer is empty, then draw sky
+            // avoids settings pixels behind objects
+            if (zb.data[zb_row + x] == std.math.inf(f32)) {
+                fb.data[fb_row + x] = color;
+            }
         }
     }
 }
@@ -161,17 +195,16 @@ pub const TextureBuffer = struct {
 
     pub fn getColor(self: TextureBuffer, u: f32, v: f32) u32 {
         // convert uv to (repeated) texture position
-        // also flip V because obj assumes different orientation
-        const x = repeatWrap(u) * @as(f32, @floatFromInt(self.width - 1));
-        const y = (1.0 - repeatWrap(v)) * @as(f32, @floatFromInt(self.height - 1));
+        const x = repeatWrap(u) * @as(f32, @floatFromInt(self.width));
+        const y = (1.0 - repeatWrap(v)) * @as(f32, @floatFromInt(self.height));
 
-        // find texture pixel above/left of sample point
-        const left: usize = @intFromFloat(@floor(x));
-        const top: usize = @intFromFloat(@floor(y));
+        // find texture pixel above/left of sample point (with repeat wrap)
+        const left: usize = @as(usize, @intFromFloat(@floor(x))) % self.width;
+        const top: usize = @as(usize, @intFromFloat(@floor(y))) % self.height;
 
-        // find texture pixel below/right of sample point
-        const right = @min(left + 1, self.width - 1);
-        const bottom = @min(top + 1, self.height - 1);
+        // find the tex pixel below/right of sample point (with repeat wrap)
+        const right = (left + 1) % self.width;
+        const bottom = (top + 1) % self.height;
 
         // fractional pos inside 2x2 pixel area (for blend weights)
         const blend_x = x - @floor(x);
@@ -187,7 +220,7 @@ pub const TextureBuffer = struct {
         const bottom_right = self.data[bottom_row + right];
 
         // blend the neighboring pixels into one color
-        return sampleBilinearColor(top_left, top_right, bottom_left, bottom_right, blend_x, blend_y);
+        return sampleThreePointColor(top_left, top_right, bottom_left, bottom_right, blend_x, blend_y);
     }
 };
 
@@ -279,7 +312,7 @@ pub const ZBuffer = struct {
     }
 
     pub fn clear(self: ZBuffer) void {
-        @memset(self.data, 20000.0); // Should be the same as Camera.far, or larger
+        @memset(self.data, std.math.inf(f32)); // Should be the same as Camera.far, or larger
     }
 
     pub fn deinit(self: ZBuffer) void {
@@ -408,12 +441,10 @@ pub fn fillTriangle(
                     const color = tb.getColor(uPixel, vPixel);
                     const alpha = color & 0xff;
 
-                    // NOTE: Don't use z_test here, we need the original z distance
-                    const final_color = addFog(color, z);
-
                     if (alpha > 127) {
+                        const final_color = addFog(color, z);
                         // TODO: Add a param to the function so we can enable/disable dither
-                        fb.setPixel(ux, uy, quantizeColor(final_color, ux, uy, true));
+                        fb.setPixel(ux, uy, final_color);
                         zb.setDepth(ux, uy, z_test);
                     }
                 }
@@ -427,6 +458,23 @@ pub fn fillTriangle(
         w0_row += dw0_dy;
         w1_row += dw1_dy;
         w2_row += dw2_dy;
+    }
+}
+
+// quantize the framebuffer outside of the filltriangle loop to gain performance
+pub fn quantizeFramebuffer(fb: FrameBuffer) void {
+    const width: usize = @intCast(fb.width);
+    const height: usize = @intCast(fb.height);
+
+    var y: usize = 0;
+    while (y < height) : (y += 1) {
+        const row = y * fb.stride;
+
+        var x: usize = 0;
+        while (x < width) : (x += 1) {
+            const i = row + x;
+            fb.data[i] = quantizeColor(fb.data[i], x, y, true);
+        }
     }
 }
 
