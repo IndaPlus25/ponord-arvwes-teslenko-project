@@ -21,15 +21,12 @@ pub const Camera = struct {
 const sky_color: u32 = 0xb8bd7cff;
 const sky_horizon_color: u32 = 0xd4cf91ff;
 const fog_color: u32 = 0xb8b878ff;
-const fog_start: f32 = 10.0;
-const fog_end: f32 = 120.0;
+const fog_start: f32 = 40.0;
+const fog_end: f32 = 150.0;
 
-// wrap UVs to [0, 1] so textures repeat
-// every second repetition is flipped (our obj expects this)
-fn mirrorWrap(value: f32) f32 {
-    const wrapped = value - @floor(value);
-    const tile: i32 = @intFromFloat(@floor(value));
-    return if (@mod(tile, 2) == 0) wrapped else 1.0 - wrapped;
+fn repeatWrap(value: f32) f32 {
+    // Keeps UVs inside [0, 1), so textures tile normally.
+    return value - @floor(value);
 }
 
 // gets one 8-bit channel from a packed RGBA (u32)
@@ -84,27 +81,6 @@ fn sampleBilinearColor(
     return mixColor(top, bottom, blend_y);
 }
 
-// Add some color to grayscale textures
-fn tintGrayscale(color: u32, dark: u32, light: u32) u32 {
-    const r = colorChannel(color, 24);
-    const g = colorChannel(color, 16);
-    const b = colorChannel(color, 8);
-    const a = colorChannel(color, 0);
-
-    // Get brightness from tex color
-    // Magic numbers come from how humans percieve brightness from RGB
-    const brightness = std.math.clamp((r * 0.299 + g * 0.587 + b * 0.114) / 255.0, 0.0, 1.0);
-    const tint = mixColor(dark, light, brightness);
-
-    // Return packed color
-    return packRgba(
-        colorChannel(tint, 24),
-        colorChannel(tint, 16),
-        colorChannel(tint, 8),
-        a,
-    );
-}
-
 // Adds a basic sky gradient, doesn't touch the z-buffer so shouldn't mess with anything
 pub fn drawSky(fb: FrameBuffer) void {
     const width: usize = @intCast(fb.width);
@@ -140,8 +116,8 @@ pub const TextureBuffer = struct {
     pub fn getColor(self: TextureBuffer, u: f32, v: f32) u32 {
         // convert uv to (repeated) texture position
         // also flip V because obj assumes different orientation
-        const x = mirrorWrap(u) * @as(f32, @floatFromInt(self.width - 1));
-        const y = (1.0 - mirrorWrap(v)) * @as(f32, @floatFromInt(self.height - 1));
+        const x = repeatWrap(u) * @as(f32, @floatFromInt(self.width - 1));
+        const y = (1.0 - repeatWrap(v)) * @as(f32, @floatFromInt(self.height - 1));
 
         // find texture pixel above/left of sample point
         const left: usize = @intFromFloat(@floor(x));
@@ -303,7 +279,6 @@ pub fn fillTriangle(
     zb: *ZBuffer,
     tb: TextureBuffer,
     db: f32,
-    should_tint_grayscale: bool,
 ) void {
     // Find the smallest possible rectangle that the triangle fits inside,
     // only loop through the pixels in this rectangle to avoid unnecessary work.
@@ -387,13 +362,8 @@ pub fn fillTriangle(
                     const color = tb.getColor(uPixel, vPixel);
                     const alpha = color & 0xff;
 
-                    var final_color = if (should_tint_grayscale)
-                        tintGrayscale(color, 0x4b4724ff, 0xb0a85cff)
-                    else
-                        color;
-
                     // NOTE: Don't use z_test here, we need the original z distance
-                    final_color = addFog(final_color, z);
+                    const final_color = addFog(color, z);
 
                     if (alpha > 127) {
                         fb.setPixel(ux, uy, final_color);
@@ -461,27 +431,4 @@ pub fn nearPlaneClip(c: [4]?Vec4, uv: [4]?Vec2, near_plane: f32) struct { [4]?Ve
     }
 
     return .{ new_c, new_uv, cn };
-}
-
-pub fn multiplyRgb(color: u32, factor: f32) u32 {
-    // 1. Extract the individual channels using bitwise operations
-    const r = (color >> 24) & 0xFF;
-    const g = (color >> 16) & 0xFF;
-    const b = (color >> 8) & 0xFF;
-    const a = color & 0xFF;
-
-    // 2. Convert to f32, multiply, and clamp
-    // We use std.math.clamp to ensure the float stays between 0.0 and 255.0
-    const new_r_f = std.math.clamp(@as(f32, @floatFromInt(r)) * factor, 0.0, 255.0);
-    const new_g_f = std.math.clamp(@as(f32, @floatFromInt(g)) * factor, 0.0, 255.0);
-    const new_b_f = std.math.clamp(@as(f32, @floatFromInt(b)) * factor, 0.0, 255.0);
-
-    // 3. Convert back to u32
-    // @intFromFloat implicitly truncates the decimal portion
-    const new_r: u32 = @intFromFloat(new_r_f);
-    const new_g: u32 = @intFromFloat(new_g_f);
-    const new_b: u32 = @intFromFloat(new_b_f);
-
-    // 4. Shift the channels back to their positions and combine them
-    return (new_r << 24) | (new_g << 16) | (new_b << 8) | a;
 }
