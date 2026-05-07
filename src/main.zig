@@ -189,12 +189,12 @@ const water_depth_bias: f32 = 0.004;
 fn textureDepthBias(texture_id: usize) f32 {
     // Helps water win when it is almost coplanar with riverbed geometry.
     return switch (texture_id) {
-        18, 19, 20 => water_depth_bias,
+        19, 20 => water_depth_bias,
         else => 0.0,
     };
 }
 
-// Broken texture fix
+// It renders as gray patches so skip for now
 fn textureShouldSkip(texture_id: usize) bool {
     return switch (texture_id) {
         19 => true,
@@ -236,7 +236,6 @@ fn renderScene(
 
     // Loop over all the objects & then every triangle in the object
     for (object_list.*.items) |object| {
-        // TEMP: capture tri_index for random colors, remove this when adding textures
         for (object.triangles.items, 0..) |tri_v, tri_index| {
             total_triangles += 1;
 
