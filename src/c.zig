@@ -15,5 +15,5 @@ pub const c = @cImport({
     @cInclude("dcimgui_impl_sdlrenderer3.h");
 
     // stb_image
-    @cInclude("lib/stb_image.h");
+    @cInclude("../vendor/stb_image.h");
 });

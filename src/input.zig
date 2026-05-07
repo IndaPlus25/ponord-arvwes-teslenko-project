@@ -1,7 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Pontus Nordström, Michael Teslenko, Arvid Westman
+// SPDX-License-Identifier: MIT
+
 const std = @import("std");
 const render = @import("render.zig");
 const app = @import("app.zig");
-const c = @import("platform/c.zig").c;
+const c = @import("c.zig").c;
 const math = @import("math.zig");
 
 pub fn processEvents(app_state: *app.AppState, world_camera: *render.Camera) void {

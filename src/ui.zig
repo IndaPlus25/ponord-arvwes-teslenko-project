@@ -1,7 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Pontus Nordström, Michael Teslenko, Arvid Westman
+// SPDX-License-Identifier: MIT
+
 const std = @import("std");
 const app = @import("app.zig");
 const render = @import("render.zig");
-const c = @import("platform/c.zig").c;
+const c = @import("c.zig").c;
 
 pub const UiState = struct {
     graph_samples: usize = 120,
@@ -11,7 +14,7 @@ pub fn initImGui(window: *c.SDL_Window, renderer: *c.SDL_Renderer) *c.ImGuiConte
     const context = c.ImGui_CreateContext(null).?;
     const io = c.ImGui_GetIO();
     io.*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
-    io.*.IniFilename = "./src/config/imgui.ini";
+    io.*.IniFilename = "assets/config/imgui.ini";
     _ = c.cImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     _ = c.cImGui_ImplSDLRenderer3_Init(renderer);
     return context;

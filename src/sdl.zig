@@ -3,7 +3,7 @@
 
 const std = @import("std");
 const c = @import("c.zig").c;
-const app = @import("../app.zig");
+const app = @import("app.zig");
 
 pub const SdlContext = struct {
     window: *c.SDL_Window,

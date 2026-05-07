@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Pontus Nordström, Michael Teslenko, Arvid Westman
 // SPDX-License-Identifier: MIT
+
 pub const WindowSettings = struct {
     screen_width: c_int = 1920,
     screen_height: c_int = 1080,
