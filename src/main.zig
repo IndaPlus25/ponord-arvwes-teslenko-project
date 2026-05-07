@@ -185,13 +185,20 @@ fn updateMovement(world_camera: *render.Camera, delta: f32) void {
 
 // TODO: Look into if there's a better solution than this...
 // We need depth bias to avoid z-fighting in these textures
-const water_depth_bias: f32 = 0.003;
-
+const water_depth_bias: f32 = 0.004;
 fn textureDepthBias(texture_id: usize) f32 {
-    // 10 = road, 18/19/20 = water materials
+    // Helps water win when it is almost coplanar with riverbed geometry.
     return switch (texture_id) {
         18, 19, 20 => water_depth_bias,
         else => 0.0,
+    };
+}
+
+// Broken texture fix
+fn textureShouldSkip(texture_id: usize) bool {
+    return switch (texture_id) {
+        19 => true,
+        else => false,
     };
 }
 
@@ -234,8 +241,8 @@ fn renderScene(
             total_triangles += 1;
 
             const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
+            if (textureShouldSkip(tex_id)) continue;
             const tb = object.textures.items[tex_id];
-
             const db = textureDepthBias(tex_id);
 
             var ca = [4]?math.Vec4{ // Array of vertexes
