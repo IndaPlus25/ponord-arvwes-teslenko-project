@@ -5,7 +5,6 @@ const render = @import("render.zig");
 const math = @import("math.zig");
 const objects = @import("objects.zig");
 
-const Model = objects.Model;
 const Object = objects.Object;
 
 const c = @cImport({
@@ -22,6 +21,9 @@ const c = @cImport({
 const screen_width: c_int = 1920;
 const screen_height: c_int = 1080;
 const screen_title: [*c]const u8 = "working-title";
+
+const n64_fb_width: c_int = 320;
+const n64_fb_height: c_int = 240;
 
 const graph_samples: usize = 120; // Amount of data points to display in graphs
 
@@ -48,7 +50,7 @@ const SdlContext = struct {
             new_w,
             new_h,
         ) orelse return error.SdlCreateTextureFailed;
-        _ = c.SDL_SetTextureScaleMode(new_tex, c.SDL_SCALEMODE_NEAREST);
+        _ = c.SDL_SetTextureScaleMode(new_tex, c.SDL_SCALEMODE_LINEAR);
         self.texture = new_tex;
         self.fb_width = new_w;
         self.fb_height = new_h;
@@ -62,6 +64,7 @@ const AppState = struct {
 
 const ViewportSettings = struct {
     render_scale: f32 = 0.25,
+    fixed_res: bool = true,
 };
 
 fn initSdl(fb_w: c_int, fb_h: c_int) !SdlContext {
@@ -90,7 +93,7 @@ fn initSdl(fb_w: c_int, fb_h: c_int) !SdlContext {
         return error.SdlCreateTextureFailed;
     };
 
-    _ = c.SDL_SetTextureScaleMode(texture, c.SDL_SCALEMODE_NEAREST);
+    _ = c.SDL_SetTextureScaleMode(texture, c.SDL_SCALEMODE_LINEAR);
 
     return SdlContext{
         .window = window.?,
@@ -180,14 +183,32 @@ fn updateMovement(world_camera: *render.Camera, delta: f32) void {
     world_camera.position = world_camera.position.add(velocity.mul(world_camera.move_speed * delta));
 }
 
+// TODO: Look into if there's a better solution than this...
+// We need depth bias to avoid z-fighting in these textures
+const water_depth_bias: f32 = 0.004;
+fn textureDepthBias(texture_id: usize) f32 {
+    // Helps water win when it is almost coplanar with riverbed geometry.
+    return switch (texture_id) {
+        19, 20 => water_depth_bias,
+        else => 0.0,
+    };
+}
+
+// It renders as gray patches so skip for now
+fn textureShouldSkip(texture_id: usize) bool {
+    return switch (texture_id) {
+        19 => true,
+        else => false,
+    };
+}
+
 fn renderScene(
     fb: render.FrameBuffer,
     zb: *render.ZBuffer,
     object_list: *std.ArrayList(Object),
     world_camera: *render.Camera,
-    // world_lighting: *const render.WorldLighting,
 ) struct { u64, u64, u64 } {
-    fb.clear();
+    render.drawSky(fb);
 
     // Construct the camera's forward direction (spherical coordinates, y is polar axis)
     const forward = math.Vec3{
@@ -215,9 +236,13 @@ fn renderScene(
 
     // Loop over all the objects & then every triangle in the object
     for (object_list.*.items) |object| {
-        // TEMP: capture tri_index for random colors, remove this when adding textures
         for (object.triangles.items, 0..) |tri_v, tri_index| {
             total_triangles += 1;
+
+            const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
+            if (textureShouldSkip(tex_id)) continue;
+            const tb = object.textures.items[tex_id];
+            const db = textureDepthBias(tex_id);
 
             var ca = [4]?math.Vec4{ // Array of vertexes
                 vp.mulVec4(tri_v[0]),
@@ -225,6 +250,14 @@ fn renderScene(
                 vp.mulVec4(tri_v[2]),
                 null, // Incase the near face clipping gives us a fourth vertex (quad)
             };
+
+            // use the fog_end as far plane culling distance
+            if (ca[0].?.w >= render.fog_end and
+                ca[1].?.w >= render.fog_end and
+                ca[2].?.w >= render.fog_end)
+            {
+                continue;
+            }
 
             var cu = [4]?math.Vec2{
                 object.triangle_uvs.items[tri_index][0],
@@ -245,12 +278,6 @@ fn renderScene(
             }
             if (cn < 3) continue; // Only continue if we have 3 or more vertexes
 
-            // // Compute lighting in world space
-            // const p0 = tri_v[0].toVec3();
-            // const p1 = tri_v[1].toVec3();
-            // const p2 = tri_v[2].toVec3();
-            // const tri_ilum: f32 = world_lighting.triangleIlum(p0, p1, p2);
-
             const v1 = ca[0].?.toPixel(fb.width, fb.height);
             const v2 = ca[1].?.toPixel(fb.width, fb.height);
             const v3 = ca[2].?.toPixel(fb.width, fb.height);
@@ -261,27 +288,17 @@ fn renderScene(
 
             // Skip triangles facing away
             if (render.facingAway(v1, v2, v3)) continue;
-            // const color: u32 = if (object.z > -4.0) 0x0000FFFF else 0xFF0000FF;
-            // const color2: u32 = render.multiplyRgb(color, tri_ilum);
 
-            const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
-            const tb = object.textures.items[tex_id];
-
-            // Apply lighting
-            // const base_color: u32 = (r << 24) | (g << 16) | (b << 8) | 0xFF;
-            // const final_color: u32 = render.multiplyRgb(base_color, tri_ilum);
-
-            render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb);
+            render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb, db);
 
             if (cn == 4) {
                 const v4 = ca[3].?.toPixel(fb.width, fb.height);
                 const uv4 = cu[3].?;
 
-                render.fillTriangle(v1, v3, v4, uv1, uv3, uv4, fb, zb, tb);
+                render.fillTriangle(v1, v3, v4, uv1, uv3, uv4, fb, zb, tb, db);
                 drawn_triangles += 1;
             }
 
-            //TODO init Texture bufer and get triangle UVs
             drawn_triangles += 1;
             if (did_clip) clipped_triangles += cn - 2;
         }
@@ -314,13 +331,30 @@ fn renderImGui(
         }
 
         const avail = c.ImGui_GetContentRegionAvail();
-        desired_w = @max(1, @as(c_int, @intFromFloat(avail.x * viewport_settings.render_scale)));
-        desired_h = @max(1, @as(c_int, @intFromFloat(avail.y * viewport_settings.render_scale)));
+
+        if (viewport_settings.fixed_res) {
+            desired_w = n64_fb_width;
+            desired_h = n64_fb_height;
+        } else {
+            desired_w = @max(1, @as(c_int, @intFromFloat(avail.x * viewport_settings.render_scale)));
+            desired_h = @max(1, @as(c_int, @intFromFloat(avail.y * viewport_settings.render_scale)));
+        }
+
+        // Letterbox in fixed res mode
+        const aspect = @as(f32, @floatFromInt(desired_w)) / @as(f32, @floatFromInt(desired_h));
+        var image_size = avail;
+
+        // Clamp
+        if (image_size.x / image_size.y > aspect) {
+            image_size.x = image_size.y * aspect;
+        } else {
+            image_size.y = image_size.x / aspect;
+        }
 
         c.ImGui_Image(c.struct_ImTextureRef_t{
             ._TexData = null,
             ._TexID = @intFromPtr(texture),
-        }, avail);
+        }, image_size);
     }
     c.ImGui_End();
 
@@ -348,6 +382,7 @@ fn renderImGui(
         }
 
         if (c.ImGui_CollapsingHeader("Post Processing", c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            _ = c.ImGui_Checkbox("Fixed N64 Res", &viewport_settings.fixed_res);
             _ = c.ImGui_InputFloat("Render Scale", &viewport_settings.render_scale);
         }
     }
@@ -362,14 +397,7 @@ fn renderImGui(
 
         c.ImGui_Separator();
 
-        var frame_counter: u32 = 0;
-        frame_counter += 1;
-        if (frame_counter >= 4) {
-            frame_counter = 0;
-        }
-
         c.ImGui_PlotLines("Frame Times", frame_times, graph_samples);
-
         c.ImGui_Text("Avg Frame Time: %.2f ms", avg_delay);
     }
     c.ImGui_End();
@@ -397,8 +425,8 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator; // TODO Maybe move into a global variable, and look into using a more efficient allocator for our intents and purposes
 
     var viewport_settings = ViewportSettings{};
-    const initial_fb_w: c_int = 640;
-    const initial_fb_h: c_int = 480;
+    const initial_fb_w: c_int = n64_fb_width;
+    const initial_fb_h: c_int = n64_fb_height;
     var sdl_context = try initSdl(initial_fb_w, initial_fb_h);
     defer c.SDL_Quit();
     defer sdl_context.deinit();
@@ -415,9 +443,9 @@ pub fn main() !void {
     var pitch: c_int = 0;
 
     // Load models
-    var kokiri_model = try objects.loadModel("models/Kokiri Forest/Kokiri Forest.obj", &allocator);
+    var kokiri_model = try objects.loadModel("models/Kokiri Forest/KF.obj", &allocator);
 
-    const world_scale: f32 = 0.02;
+    const world_scale: f32 = 0.05;
 
     // Scale down the world
     for (kokiri_model.triangles.items) |*tri| {
@@ -442,13 +470,6 @@ pub fn main() !void {
     var world_camera = render.Camera{
         .position = .{ .x = 3, .y = 2, .z = 6 },
     };
-
-    // const light_sources = [_]render.LightSource{
-    // .{ .SkyLight = .{ .brightness = 1 } },
-    // .{ .PointLight = .{ .position = .{ .x = 0, .y = -10, .z = -2 }, .brightness = 0.5 } },
-    // };
-
-    // const world_lighting = render.WorldLighting{ .ambient = 0.3, .light_sources = &light_sources };
 
     // Performance variables
     const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second

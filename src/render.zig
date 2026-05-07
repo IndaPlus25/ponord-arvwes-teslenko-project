@@ -9,17 +9,149 @@ pub const Camera = struct {
     yaw: f32 = 0.0, // rotation around the up vector (left/right) in radians
     pitch: f32 = 0.0, // rotation around the camera right axis (up/down) in radians
     sensitivity: f32 = 0.0018, // mouse sensitivity
-    move_speed: f32 = 12.0, // move speed
+    move_speed: f32 = 18.0, // move speed
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
     fov: f32 = 60.0, // field of view in degrees
     near: f32 = 0.2, // distance to near plane
-    far: f32 = 240.0, // distance to far plane
+    far: f32 = 450.0, // distance to far plane
 };
 
-// Helper for mirrored textures
-fn mirrorWrap(x: f32) f32 {
-    const t = x - @floor(x / 2.0) * 2.0;
-    return if (t < 1.0) t else 2.0 - t;
+// TODO: Add these to ImGui so we can play with values
+// TODO: Maybe put these in a struct?
+const sky_color: u32 = 0xaeb982ff;
+const sky_horizon_color: u32 = 0xd2cc95ff;
+const fog_color: u32 = 0xb8b982ff;
+const fog_strength: f32 = 1.25;
+pub const fog_start: f32 = 70.0; // used in main
+pub const fog_end: f32 = 220.0; // used in main
+
+// keeps UVs inside [0, 1], so textures tile normally
+fn repeatWrap(value: f32) f32 {
+    return value - @floor(value);
+}
+
+// gets one 8-bit channel from a packed RGBA (u32)
+// shift = 24 red
+// shift = 16 green
+// shift = 8 blue
+// shift = 0 alpha
+fn colorChannel(color: u32, shift: u5) f32 {
+    return @floatFromInt((color >> shift) & 0xff);
+}
+
+// takes 4 channels and packs it into RGBA
+// clamps each channel to [0, 255]
+fn packRgba(r: f32, g: f32, b: f32, a: f32) u32 {
+    const red: u32 = @intFromFloat(std.math.clamp(r, 0.0, 255.0));
+    const green: u32 = @intFromFloat(std.math.clamp(g, 0.0, 255.0));
+    const blue: u32 = @intFromFloat(std.math.clamp(b, 0.0, 255.0));
+    const alpha: u32 = @intFromFloat(std.math.clamp(a, 0.0, 255.0));
+    return (red << 24) | (green << 16) | (blue << 8) | alpha;
+}
+
+// lerp between two colors to mix them
+// amt = 0.0 gives color a
+// amt = 1.0 gives color b
+// amt = 0.5 gives a mix of a, b
+fn mixColor(a: u32, b: u32, amt: f32) u32 {
+    const t = std.math.clamp(amt, 0.0, 1.0);
+
+    // a + (b - a) * t is the lerp formula
+    return packRgba(
+        colorChannel(a, 24) + (colorChannel(b, 24) - colorChannel(a, 24)) * t,
+        colorChannel(a, 16) + (colorChannel(b, 16) - colorChannel(a, 16)) * t,
+        colorChannel(a, 8) + (colorChannel(b, 8) - colorChannel(a, 8)) * t,
+        colorChannel(a, 0) + (colorChannel(b, 0) - colorChannel(a, 0)) * t,
+    );
+}
+
+// classic bayer4 dithering matrix
+// https://en.wikipedia.org/wiki/Ordered_dithering
+fn bayer4(x: usize, y: usize) f32 {
+    const matrix = [_]u8{
+        0,  8,  2,  10,
+        12, 4,  14, 6,
+        3,  11, 1,  9,
+        15, 7,  13, 5,
+    };
+
+    const index = (y % 4) * 4 + (x % 4);
+
+    // takes the bayer value [0, 15] and converts to [-0.5, 0.5]
+    return (@as(f32, @floatFromInt(matrix[index])) / 15.0) - 0.5;
+}
+
+// takes in a single channel, applies dithering, quantizes to 5-bit then turn to 8-bit for RGBA
+fn quantizeChannel(value: f32, dither: f32) f32 {
+    // 255 is max for u8, 31 is max for u5, so (255/31) is one u5 step in u8 space
+    // 0.7 is just a scalar to make dithering less aggressive
+    const adj_color = std.math.clamp(value + dither * (255.0 / 31.0) * 0.7, 0.0, 255.0);
+
+    // converts from u8 to u5 and rounds it
+    const new_color: u32 = @intFromFloat(std.math.round(adj_color * 31.0 / 255.0));
+
+    // expand u5 back to u8 to fit in our RGBA fb
+    // << 3 turns to u8, >> 2 fills the empty bits from shifting
+    return @floatFromInt((new_color << 3) | (new_color >> 2));
+}
+
+// takes a packed RGBA and quantizes RGB to 5-bit
+// NOTE: alpha is unchanged
+fn quantizeColor(color: u32, x: usize, y: usize, use_dither: bool) u32 {
+    const dither = if (use_dither) bayer4(x, y) else 0.0;
+
+    return packRgba(
+        quantizeChannel(colorChannel(color, 24), dither), // r
+        quantizeChannel(colorChannel(color, 16), dither), // g
+        quantizeChannel(colorChannel(color, 8), dither), // b
+        colorChannel(color, 0), // a
+    );
+}
+
+// bilinear interpolation between 4 neighbouring pixels
+fn sampleBilinearColor(
+    top_left: u32,
+    top_right: u32,
+    bottom_left: u32,
+    bottom_right: u32,
+    blend_x: f32,
+    blend_y: f32,
+) u32 {
+    // blend top row horizontally
+    // blend bottom row horizontally
+    // blend those vertically
+    const top = mixColor(top_left, top_right, blend_x);
+    const bottom = mixColor(bottom_left, bottom_right, blend_x);
+    return mixColor(top, bottom, blend_y);
+}
+
+// Adds a basic sky gradient, doesn't touch the z-buffer so shouldn't mess with anything
+pub fn drawSky(fb: FrameBuffer) void {
+    const width: usize = @intCast(fb.width);
+    const height: usize = @intCast(fb.height);
+    const max_y: f32 = @floatFromInt(if (height > 1) height - 1 else 1);
+
+    var y: usize = 0;
+    while (y < height) : (y += 1) {
+        // 1.0 is top of screen, 0.0 bottom
+        const t = @as(f32, @floatFromInt(y)) / max_y;
+        const color = mixColor(sky_color, sky_horizon_color, t);
+
+        var x: usize = 0;
+        while (x < width) : (x += 1) {
+            // TODO: Add param to function to enable/disable dither
+            fb.data[y * fb.stride + x] = quantizeColor(color, x, y, true);
+        }
+    }
+}
+
+// Fade pixels far away for fog effect
+fn addFog(color: u32, depth: f32) u32 {
+    if (depth <= fog_start) return color;
+    if (depth >= fog_end) return fog_color;
+    var fog_amt = (depth - fog_start) / (fog_end - fog_start);
+    fog_amt = std.math.clamp(fog_amt * fog_strength, 0.0, 1.0);
+    return mixColor(color, fog_color, fog_amt);
 }
 
 pub const TextureBuffer = struct {
@@ -27,36 +159,45 @@ pub const TextureBuffer = struct {
     width: usize,
     height: usize,
 
-    pub fn getColor(self: TextureBuffer, U: f32, V: f32) u32 {
-        const u_wrapped = mirrorWrap(U);
-        const v_wrapped = 1.0 - mirrorWrap(V);
+    pub fn getColor(self: TextureBuffer, u: f32, v: f32) u32 {
+        // convert uv to (repeated) texture position
+        // also flip V because obj assumes different orientation
+        const x = repeatWrap(u) * @as(f32, @floatFromInt(self.width - 1));
+        const y = (1.0 - repeatWrap(v)) * @as(f32, @floatFromInt(self.height - 1));
 
-        const x: usize = @min(
-            @as(usize, @intFromFloat(u_wrapped * @as(f32, @floatFromInt(self.width)))),
-            self.width - 1,
-        );
+        // find texture pixel above/left of sample point
+        const left: usize = @intFromFloat(@floor(x));
+        const top: usize = @intFromFloat(@floor(y));
 
-        const y: usize = @min(
-            @as(usize, @intFromFloat(v_wrapped * @as(f32, @floatFromInt(self.height)))),
-            self.height - 1,
-        );
+        // find texture pixel below/right of sample point
+        const right = @min(left + 1, self.width - 1);
+        const bottom = @min(top + 1, self.height - 1);
 
-        const index = x + (y * self.width);
-        return self.data[index];
-    }
+        // fractional pos inside 2x2 pixel area (for blend weights)
+        const blend_x = x - @floor(x);
+        const blend_y = y - @floor(y);
 
-    pub fn clear(self: TextureBuffer) void {
-        @memset(self.data, 0);
+        // index = row * width + column
+        const top_row = top * self.width;
+        const bottom_row = bottom * self.width;
+
+        const top_left = self.data[top_row + left];
+        const top_right = self.data[top_row + right];
+        const bottom_left = self.data[bottom_row + left];
+        const bottom_right = self.data[bottom_row + right];
+
+        // blend the neighboring pixels into one color
+        return sampleBilinearColor(top_left, top_right, bottom_left, bottom_right, blend_x, blend_y);
     }
 };
 
+// TODO: Vertex lighting instead of per triangle?
 pub const WorldLighting = struct {
     ambient: f32 = 0.3,
     light_sources: []const LightSource,
     pub fn SkyDirection() Vec3 {
         return .{ .x = 0, .y = 1, .z = 0 };
     }
-    //returns a scalefactor 0..=1 based on avg brightnes on the given triangle
     pub fn triangleIlum(self: WorldLighting, v1: Vec3, v2: Vec3, v3: Vec3) f32 {
         var total: f32 = 0;
 
@@ -164,61 +305,6 @@ pub const ZBuffer = struct {
     }
 };
 
-pub fn drawTriangle(v1: Vec3, v2: Vec3, v3: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
-    drawLine(v1, v2, fb, zb, color);
-    drawLine(v1, v3, fb, zb, color);
-    drawLine(v2, v3, fb, zb, color);
-}
-
-fn floatToPixel(v: f32) isize {
-    return @as(isize, @intFromFloat(@round(v)));
-}
-
-pub fn drawLine(start: Vec3, end: Vec3, fb: FrameBuffer, zb: *ZBuffer, color: u32) void {
-    var x0: isize = (floatToPixel(start.x));
-    var y0: isize = (floatToPixel(start.y));
-    var z0: f32 = start.z;
-    const x1: isize = (floatToPixel(end.x));
-    const y1: isize = (floatToPixel(end.y));
-    const z1: f32 = end.z;
-
-    const dx: isize = @as(isize, @intCast(@abs(x1 - x0)));
-    const dy: isize = -@as(isize, @intCast(@abs(y1 - y0)));
-    const dz: f32 = z1 - z0;
-
-    const sx: isize = if (x0 < x1) 1 else -1;
-    const sy: isize = if (y0 < y1) 1 else -1;
-
-    var err = dx + dy;
-
-    const steps: f32 = @floatFromInt(if (dx >= -dy) dx else -dy);
-    const dz_dsteps: f32 = if (steps > 0) dz / steps else 0.0;
-
-    while (true) {
-        if (x0 >= 0 and y0 >= 0 and x0 < fb.width and y0 < fb.height) {
-            const ux0: usize = @intCast(x0);
-            const uy0: usize = @intCast(y0);
-            if (zb.getDepth(ux0, uy0) > z0) {
-                fb.setPixel(ux0, uy0, color);
-                zb.setDepth(ux0, uy0, z0);
-            }
-        }
-
-        const e2 = 2 * err;
-        if (e2 >= dy) {
-            if (x0 == x1) break;
-            err += dy;
-            x0 += sx;
-        }
-        if (e2 <= dx) {
-            if (y0 == y1) break;
-            err += dx;
-            y0 += sy;
-        }
-        z0 += dz_dsteps;
-    }
-}
-
 // This is equivalent to the z component of the cross product (b-a) x (c-a), by the right hand rule
 // we can see that either z points "into" the screen, or out, if it's pointing away from the camera we don't render it
 fn edgeFunction(a: Vec3, b: Vec3, c: Vec3) f32 {
@@ -238,6 +324,7 @@ pub fn fillTriangle(
     fb: FrameBuffer,
     zb: *ZBuffer,
     tb: TextureBuffer,
+    db: f32,
 ) void {
     // Find the smallest possible rectangle that the triangle fits inside,
     // only loop through the pixels in this rectangle to avoid unnecessary work.
@@ -307,20 +394,27 @@ pub fn fillTriangle(
             if (w0 * area >= 0 and w1 * area >= 0 and w2 * area >= 0) {
                 // Cursed expression to get the perspective correct depth at this pixel
                 const z = 1.0 / ((w0 * inv_z1 + w1 * inv_z2 + w2 * inv_z3) * inv_area);
+                // Dumb fix for z-fighting with road/path
+                const z_test = z - db;
+
                 const ux: usize = @intCast(px);
                 const uy: usize = @intCast(py);
                 // If the depth of whatever is at this pixel is bigger than what we want to draw,
                 // that means our new pixel is closer, so we draw it and update the buffer
-                if (zb.getDepth(ux, uy) > z) {
+                if (zb.getDepth(ux, uy) > z_test) {
                     const uPixel = z * (w0 * uv1.u * inv_z1 + w1 * uv2.u * inv_z2 + w2 * uv3.u * inv_z3) * inv_area;
                     const vPixel = z * (w0 * uv1.v * inv_z1 + w1 * uv2.v * inv_z2 + w2 * uv3.v * inv_z3) * inv_area;
 
                     const color = tb.getColor(uPixel, vPixel);
                     const alpha = color & 0xff;
 
-                    if (alpha != 0) {
-                        fb.setPixel(ux, uy, color);
-                        zb.setDepth(ux, uy, z);
+                    // NOTE: Don't use z_test here, we need the original z distance
+                    const final_color = addFog(color, z);
+
+                    if (alpha > 127) {
+                        // TODO: Add a param to the function so we can enable/disable dither
+                        fb.setPixel(ux, uy, quantizeColor(final_color, ux, uy, true));
+                        zb.setDepth(ux, uy, z_test);
                     }
                 }
             }
@@ -384,27 +478,4 @@ pub fn nearPlaneClip(c: [4]?Vec4, uv: [4]?Vec2, near_plane: f32) struct { [4]?Ve
     }
 
     return .{ new_c, new_uv, cn };
-}
-
-pub fn multiplyRgb(color: u32, factor: f32) u32 {
-    // 1. Extract the individual channels using bitwise operations
-    const r = (color >> 24) & 0xFF;
-    const g = (color >> 16) & 0xFF;
-    const b = (color >> 8) & 0xFF;
-    const a = color & 0xFF;
-
-    // 2. Convert to f32, multiply, and clamp
-    // We use std.math.clamp to ensure the float stays between 0.0 and 255.0
-    const new_r_f = std.math.clamp(@as(f32, @floatFromInt(r)) * factor, 0.0, 255.0);
-    const new_g_f = std.math.clamp(@as(f32, @floatFromInt(g)) * factor, 0.0, 255.0);
-    const new_b_f = std.math.clamp(@as(f32, @floatFromInt(b)) * factor, 0.0, 255.0);
-
-    // 3. Convert back to u32
-    // @intFromFloat implicitly truncates the decimal portion
-    const new_r: u32 = @intFromFloat(new_r_f);
-    const new_g: u32 = @intFromFloat(new_g_f);
-    const new_b: u32 = @intFromFloat(new_b_f);
-
-    // 4. Shift the channels back to their positions and combine them
-    return (new_r << 24) | (new_g << 16) | (new_b << 8) | a;
 }
