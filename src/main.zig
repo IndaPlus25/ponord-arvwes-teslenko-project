@@ -437,7 +437,7 @@ pub fn main() !void {
     var pitch: c_int = 0;
 
     // Load models
-    var kokiri_model = try objects.loadModel("models/Kokiri Forest/Kokiri Forest.obj", &allocator);
+    var kokiri_model = try objects.loadModel("models/Kokiri Forest/KF.obj", &allocator);
 
     const world_scale: f32 = 0.02;
 
