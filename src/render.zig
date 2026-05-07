@@ -24,8 +24,8 @@ const fog_color: u32 = 0xb8b878ff;
 const fog_start: f32 = 40.0;
 const fog_end: f32 = 150.0;
 
+// keeps UVs inside [0, 1], so textures tile normally
 fn repeatWrap(value: f32) f32 {
-    // Keeps UVs inside [0, 1), so textures tile normally.
     return value - @floor(value);
 }
 
@@ -64,6 +64,49 @@ fn mixColor(a: u32, b: u32, amt: f32) u32 {
     );
 }
 
+// classic bayer4 dithering matrix
+// https://en.wikipedia.org/wiki/Ordered_dithering
+fn bayer4(x: usize, y: usize) f32 {
+    const matrix = [_]u8{
+        0,  8,  2,  10,
+        12, 4,  14, 6,
+        3,  11, 1,  9,
+        15, 7,  13, 5,
+    };
+
+    const index = (y % 4) * 4 + (x % 4);
+
+    // takes the bayer value [0, 15] and converts to [-0.5, 0.5]
+    return (@as(f32, @floatFromInt(matrix[index])) / 15.0) - 0.5;
+}
+
+// takes in a single channel, applies dithering, quantizes to 5-bit then turn to 8-bit for RGBA
+fn quantizeChannel(value: f32, dither: f32) f32 {
+    // 255 is max for u8, 31 is max for u5, so (255/31) is one u5 step in u8 space
+    // 0.7 is just a scalar to make dithering less aggressive
+    const adj_color = std.math.clamp(value + dither * (255.0 / 31.0) * 0.7, 0.0, 255.0);
+
+    // converts from u8 to u5 and rounds it
+    const new_color: u32 = @intFromFloat(std.math.round(adj_color * 31.0 / 255.0));
+
+    // expand u5 back to u8 to fit in our RGBA fb
+    // << 3 turns to u8, >> 2 fills the empty bits from shifting
+    return @floatFromInt((new_color << 3) | (new_color >> 2));
+}
+
+// takes a packed RGBA and quantizes RGB to 5-bit
+// NOTE: alpha is unchanged
+fn quantizeColor(color: u32, x: usize, y: usize, use_dither: bool) u32 {
+    const dither = if (use_dither) bayer4(x, y) else 0.0;
+
+    return packRgba(
+        quantizeChannel(colorChannel(color, 24), dither), // r
+        quantizeChannel(colorChannel(color, 16), dither), // g
+        quantizeChannel(colorChannel(color, 8), dither), // b
+        colorChannel(color, 0), // a
+    );
+}
+
 // bilinear interpolation between 4 neighbouring pixels
 fn sampleBilinearColor(
     top_left: u32,
@@ -95,7 +138,8 @@ pub fn drawSky(fb: FrameBuffer) void {
 
         var x: usize = 0;
         while (x < width) : (x += 1) {
-            fb.data[y * fb.stride + x] = color;
+            // TODO: Add param to function to enable/disable dither
+            fb.data[y * fb.stride + x] = quantizeColor(color, x, y, true);
         }
     }
 }
@@ -366,7 +410,8 @@ pub fn fillTriangle(
                     const final_color = addFog(color, z);
 
                     if (alpha > 127) {
-                        fb.setPixel(ux, uy, final_color);
+                        // TODO: Add a param to the function so we can enable/disable dither
+                        fb.setPixel(ux, uy, quantizeColor(final_color, ux, uy, true));
                         zb.setDepth(ux, uy, z_test);
                     }
                 }
