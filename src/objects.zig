@@ -1,14 +1,8 @@
 const std = @import("std");
 const math = @import("math.zig");
 const render = @import("render.zig");
+const c = @import("platform/c.zig").c;
 
-// Import the yoinked image handler
-// https://github.com/nothings/stb/blob/master/stb_image.h
-const c = @cImport({
-    @cInclude("lib/stb_image.h");
-});
-
-// An object with a position
 pub const Object = struct {
     x: f32,
     y: f32,

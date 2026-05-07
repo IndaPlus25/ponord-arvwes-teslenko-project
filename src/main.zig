@@ -4,186 +4,13 @@ const std = @import("std");
 const render = @import("render.zig");
 const math = @import("math.zig");
 const objects = @import("objects.zig");
+const app = @import("app.zig");
+const ui = @import("ui.zig");
+const c = @import("platform/c.zig").c;
+const sdl = @import("platform/sdl.zig");
+const input = @import("input.zig");
 
 const Object = objects.Object;
-
-const c = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3/SDL_revision.h");
-    @cDefine("SDL_MAIN_HANDLED", {});
-    @cInclude("SDL3/SDL_main.h");
-    @cInclude("dcimgui.h");
-    @cInclude("dcimgui_impl_sdl3.h");
-    @cInclude("dcimgui_impl_sdlrenderer3.h");
-});
-
-const WindowSettings = struct {
-    screen_width: c_int = 1920,
-    screen_height: c_int = 1080,
-    screen_title: [*c]const u8 = "working-title",
-};
-
-const AppState = struct {
-    is_running: bool = true,
-    mouse_captured: bool = true,
-};
-
-const ViewportSettings = struct {
-    render_scale: f32 = 0.25,
-    fixed_res: bool = true,
-};
-
-const n64_fb_width: c_int = 320;
-const n64_fb_height: c_int = 240;
-
-const graph_samples: usize = 120; // Amount of data points to display in graphs
-
-const SdlContext = struct {
-    window: *c.SDL_Window,
-    renderer: *c.SDL_Renderer,
-    texture: *c.SDL_Texture,
-    fb_width: c_int,
-    fb_height: c_int,
-
-    pub fn deinit(self: SdlContext) void {
-        c.SDL_DestroyTexture(self.texture);
-        c.SDL_DestroyRenderer(self.renderer);
-        c.SDL_DestroyWindow(self.window);
-    }
-
-    pub fn resizeFramebuffer(self: *SdlContext, new_w: c_int, new_h: c_int) !void {
-        if (new_w == self.fb_width and new_h == self.fb_height) return;
-        c.SDL_DestroyTexture(self.texture);
-        const new_tex = c.SDL_CreateTexture(
-            self.renderer,
-            c.SDL_PIXELFORMAT_RGBA8888,
-            c.SDL_TEXTUREACCESS_STREAMING,
-            new_w,
-            new_h,
-        ) orelse return error.SdlCreateTextureFailed;
-        _ = c.SDL_SetTextureScaleMode(new_tex, c.SDL_SCALEMODE_LINEAR);
-        self.texture = new_tex;
-        self.fb_width = new_w;
-        self.fb_height = new_h;
-    }
-};
-
-fn initSdl(fb_w: c_int, fb_h: c_int, ws: WindowSettings) !SdlContext {
-    var window: ?*c.SDL_Window = null;
-    var renderer: ?*c.SDL_Renderer = null;
-
-    if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
-        std.debug.print("SDL_Init failed: {s}\n", .{c.SDL_GetError()});
-        return error.SdlInitFailed;
-    }
-    errdefer c.SDL_Quit();
-
-    if (!c.SDL_CreateWindowAndRenderer(ws.screen_title, ws.screen_width, ws.screen_height, 0, &window, &renderer)) {
-        std.debug.print("SDL_CreateWindowAndRenderer failed: {s}\n", .{c.SDL_GetError()});
-        return error.SdlWindowCreationFailed;
-    }
-
-    const texture = c.SDL_CreateTexture(
-        renderer,
-        c.SDL_PIXELFORMAT_RGBA8888,
-        c.SDL_TEXTUREACCESS_STREAMING,
-        fb_w,
-        fb_h,
-    ) orelse {
-        std.debug.print("SDL_CreateTexture failed: {s}\n", .{c.SDL_GetError()});
-        return error.SdlCreateTextureFailed;
-    };
-
-    _ = c.SDL_SetTextureScaleMode(texture, c.SDL_SCALEMODE_LINEAR);
-
-    return SdlContext{
-        .window = window.?,
-        .renderer = renderer.?,
-        .texture = texture,
-        .fb_width = fb_w,
-        .fb_height = fb_h,
-    };
-}
-
-fn initImGui(window: *c.SDL_Window, renderer: *c.SDL_Renderer) *c.ImGuiContext {
-    const context = c.ImGui_CreateContext(null).?;
-    const io = c.ImGui_GetIO();
-    io.*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
-    io.*.IniFilename = "./src/config/imgui.ini";
-    _ = c.cImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
-    _ = c.cImGui_ImplSDLRenderer3_Init(renderer);
-    return context;
-}
-
-fn deinitImGui(context: *c.ImGuiContext) void {
-    c.cImGui_ImplSDLRenderer3_Shutdown();
-    c.cImGui_ImplSDL3_Shutdown();
-    c.ImGui_DestroyContext(context);
-}
-
-fn processEvents(app_state: *AppState, world_camera: *render.Camera) void {
-    var event: c.SDL_Event = undefined;
-
-    while (c.SDL_PollEvent(&event)) {
-        _ = c.cImGui_ImplSDL3_ProcessEvent(&event);
-
-        // Capture mouse input
-        if (app_state.mouse_captured) {
-            if (event.type == c.SDL_EVENT_MOUSE_MOTION) {
-                world_camera.yaw += event.motion.xrel * world_camera.sensitivity;
-                world_camera.pitch -= event.motion.yrel * world_camera.sensitivity;
-
-                const cutoff = std.math.pi / 2.0 - 0.01; // Dont divide by zero
-                world_camera.pitch = std.math.clamp(world_camera.pitch, -cutoff, cutoff); // Clamp
-                world_camera.yaw = @mod(world_camera.yaw, std.math.tau); // tau = 2pi
-            }
-            if (event.type == c.SDL_EVENT_KEY_DOWN and event.key.key == c.SDLK_ESCAPE) {
-                app_state.mouse_captured = false;
-            }
-        }
-
-        // Terminate window
-        if (event.type == c.SDL_EVENT_QUIT) {
-            app_state.is_running = false;
-        }
-    }
-}
-
-fn updateMovement(world_camera: *render.Camera, delta: f32) void {
-    const keys = c.SDL_GetKeyboardState(null);
-
-    // Same matrices as forward just without pitch since y = 0
-    const move_forward = math.Vec3{
-        .x = @sin(world_camera.yaw),
-        .y = 0,
-        .z = -@cos(world_camera.yaw),
-    };
-    const move_right = math.Vec3{
-        .x = @cos(world_camera.yaw),
-        .y = 0,
-        .z = @sin(world_camera.yaw),
-    };
-
-    // Horizontal movement
-    var velocity = math.Vec3{ .x = 0, .y = 0, .z = 0 };
-    if (keys[c.SDL_SCANCODE_W]) velocity = velocity.add(move_forward);
-    if (keys[c.SDL_SCANCODE_S]) velocity = velocity.sub(move_forward);
-    if (keys[c.SDL_SCANCODE_D]) velocity = velocity.add(move_right);
-    if (keys[c.SDL_SCANCODE_A]) velocity = velocity.sub(move_right);
-
-    // Normalize horizontal movement so W+D isn't sqr(2) faster
-    if (velocity.len() > 0.0) {
-        velocity = velocity.norm();
-    }
-
-    // Vertical movement
-    if (keys[c.SDL_SCANCODE_SPACE]) velocity.y += 1;
-    if (keys[c.SDL_SCANCODE_LSHIFT]) velocity.y -= 1;
-
-    // Apply movement
-    world_camera.position = world_camera.position.add(velocity.mul(world_camera.move_speed * delta));
-}
 
 // TODO: Look into if there's a better solution than this...
 // We need depth bias to avoid z-fighting in these textures
@@ -309,136 +136,22 @@ fn renderScene(
     return .{ total_triangles, drawn_triangles, clipped_triangles };
 }
 
-fn renderImGui(
-    texture: *c.SDL_Texture,
-    frame_times: *[graph_samples]f32,
-    triangles: struct { u64, u64, u64 },
-    world_camera: *render.Camera,
-    app_state: *AppState,
-    viewport_settings: *ViewportSettings,
-) struct { c_int, c_int } {
-    c.cImGui_ImplSDLRenderer3_NewFrame();
-    c.cImGui_ImplSDL3_NewFrame();
-    c.ImGui_NewFrame();
-
-    _ = c.ImGui_DockSpaceOverViewport();
-
-    var desired_w: c_int = 1;
-    var desired_h: c_int = 1;
-
-    // Viewport stuff
-    if (c.ImGui_Begin("Viewport", null, 0)) {
-        if (c.ImGui_IsWindowHovered(0) and c.ImGui_IsMouseClicked(c.ImGuiMouseButton_Left)) {
-            app_state.mouse_captured = true;
-        }
-
-        const avail = c.ImGui_GetContentRegionAvail();
-
-        if (viewport_settings.fixed_res) {
-            desired_w = n64_fb_width;
-            desired_h = n64_fb_height;
-        } else {
-            desired_w = @max(1, @as(c_int, @intFromFloat(avail.x * viewport_settings.render_scale)));
-            desired_h = @max(1, @as(c_int, @intFromFloat(avail.y * viewport_settings.render_scale)));
-        }
-
-        // Letterbox in fixed res mode
-        const aspect = @as(f32, @floatFromInt(desired_w)) / @as(f32, @floatFromInt(desired_h));
-        var image_size = avail;
-
-        // Clamp
-        if (image_size.x / image_size.y > aspect) {
-            image_size.x = image_size.y * aspect;
-        } else {
-            image_size.y = image_size.x / aspect;
-        }
-
-        c.ImGui_Image(c.struct_ImTextureRef_t{
-            ._TexData = null,
-            ._TexID = @intFromPtr(texture),
-        }, image_size);
-    }
-    c.ImGui_End();
-
-    if (c.ImGui_Begin("Camera Settings", null, 0)) {
-        if (c.ImGui_CollapsingHeader("Position", c.ImGuiTreeNodeFlags_DefaultOpen)) {
-            _ = c.ImGui_InputFloat("X", &world_camera.position.x);
-            _ = c.ImGui_InputFloat("Y", &world_camera.position.y);
-            _ = c.ImGui_InputFloat("Z", &world_camera.position.z);
-        }
-
-        if (c.ImGui_CollapsingHeader("Rotation", c.ImGuiTreeNodeFlags_DefaultOpen)) {
-            _ = c.ImGui_InputFloat("Yaw", &world_camera.yaw);
-            _ = c.ImGui_InputFloat("Pitch", &world_camera.pitch);
-        }
-
-        if (c.ImGui_CollapsingHeader("Movement", c.ImGuiTreeNodeFlags_DefaultOpen)) {
-            _ = c.ImGui_InputFloat("Move Speed", &world_camera.move_speed);
-            _ = c.ImGui_InputFloat("Sensitivity", &world_camera.sensitivity);
-        }
-
-        if (c.ImGui_CollapsingHeader("Projection", c.ImGuiTreeNodeFlags_DefaultOpen)) {
-            _ = c.ImGui_InputFloat("FOV", &world_camera.fov);
-            _ = c.ImGui_InputFloat("Near Plane", &world_camera.near);
-            _ = c.ImGui_InputFloat("Far Plane", &world_camera.far);
-        }
-
-        if (c.ImGui_CollapsingHeader("Post Processing", c.ImGuiTreeNodeFlags_DefaultOpen)) {
-            _ = c.ImGui_Checkbox("Fixed N64 Res", &viewport_settings.fixed_res);
-            _ = c.ImGui_InputFloat("Render Scale", &viewport_settings.render_scale);
-        }
-    }
-    c.ImGui_End();
-
-    if (c.ImGui_Begin("Performance Metrics", null, 0)) {
-        const avg_delay = @reduce(.Add, @as(@Vector(graph_samples, f32), frame_times.*)) / graph_samples;
-        const fps = 1000.0 / avg_delay;
-
-        c.ImGui_Text("FPS: %.1f", fps);
-        c.ImGui_Text("Frame Time: %.2f ms", frame_times.*[graph_samples - 1]);
-
-        c.ImGui_Separator();
-
-        c.ImGui_PlotLines("Frame Times", frame_times, graph_samples);
-        c.ImGui_Text("Avg Frame Time: %.2f ms", avg_delay);
-    }
-    c.ImGui_End();
-
-    if (c.ImGui_Begin("Render Metrics", null, 0)) {
-        c.ImGui_Text("Total Triangles: %d", triangles[0]);
-        c.ImGui_Text("Drawn Triangles: %d", triangles[1]);
-        c.ImGui_Text("Clipped Triangles: %d", triangles[2]);
-    }
-    c.ImGui_End();
-
-    if (c.ImGui_Begin("Input Information", null, 0)) {
-        c.ImGui_Text("Yaw:   %.2f", world_camera.yaw);
-        c.ImGui_Text("Pitch: %.2f", world_camera.pitch);
-        _ = c.ImGui_Checkbox("Mouse Captured", &app_state.mouse_captured);
-    }
-    c.ImGui_End();
-
-    c.ImGui_Render();
-
-    return .{ desired_w, desired_h };
-}
-
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
-    var viewport_settings = ViewportSettings{};
-    const window_settings = WindowSettings{};
-    var app_state = AppState{};
+    var viewport_settings = app.ViewportSettings{};
+    const window_settings = app.WindowSettings{};
+    var app_state = app.AppState{};
 
-    const initial_fb_w: c_int = n64_fb_width;
-    const initial_fb_h: c_int = n64_fb_height;
+    const initial_fb_w: c_int = viewport_settings.fixed_width;
+    const initial_fb_h: c_int = viewport_settings.fixed_height;
 
-    var sdl_context = try initSdl(initial_fb_w, initial_fb_h, window_settings);
+    var sdl_context = try sdl.initSdl(initial_fb_w, initial_fb_h, window_settings);
     defer c.SDL_Quit();
     defer sdl_context.deinit();
 
-    const imgui_context = initImGui(sdl_context.window, sdl_context.renderer);
-    defer deinitImGui(imgui_context);
+    const imgui_context = ui.initImGui(sdl_context.window, sdl_context.renderer);
+    defer ui.deinitImGui(imgui_context);
 
     var pixels: ?*anyopaque = null;
     var pitch: c_int = 0;
@@ -475,7 +188,7 @@ pub fn main() !void {
     // Performance variables
     const frequency = c.SDL_GetPerformanceFrequency(); // Get SDL counter ticks per second
     var last_count: u64 = c.SDL_GetPerformanceCounter(); // Last time that a frame was counted
-    var frame_times: [graph_samples]f32 = undefined; // An array with all frame time data points
+    var frame_times: [app.frame_time_sample_count]f32 = undefined; // An array with all frame time data points
 
     // Init zbuffer
     var zb = try render.ZBuffer.init(initial_fb_w, initial_fb_h);
@@ -491,11 +204,11 @@ pub fn main() !void {
         const delta = @as(f32, @floatFromInt(current_count - last_count)) / @as(f32, @floatFromInt(frequency)); // Calculate delay between frames in seconds
         last_count = current_count;
 
-        @memmove(frame_times[0 .. graph_samples - 1], frame_times[1..graph_samples]); // Shift array contents one step to the left
-        frame_times[graph_samples - 1] = delta * 1000; // Add data point at the end
+        @memmove(frame_times[0 .. app.frame_time_sample_count - 1], frame_times[1..app.frame_time_sample_count]); // Shift array contents one step to the left
+        frame_times[app.frame_time_sample_count - 1] = delta * 1000; // Add data point at the end
 
         // Process events & handle cursor
-        processEvents(&app_state, &world_camera);
+        input.processEvents(&app_state, &world_camera);
         const sdl_has_capture = c.SDL_GetWindowRelativeMouseMode(sdl_context.window);
         if (app_state.mouse_captured != sdl_has_capture) {
             _ = c.SDL_SetWindowRelativeMouseMode(sdl_context.window, app_state.mouse_captured);
@@ -503,7 +216,7 @@ pub fn main() !void {
 
         // Handle movement
         if (app_state.mouse_captured) {
-            updateMovement(&world_camera, delta);
+            input.updateMovement(&world_camera, delta);
         }
 
         // Resize framebuffer/zbuffer if window size changed
@@ -528,9 +241,9 @@ pub fn main() !void {
         _ = c.SDL_RenderClear(sdl_context.renderer);
 
         // renderImGui returns desired size for the NEXT frame
-        const new_size = renderImGui(sdl_context.texture, &frame_times, triangles, &world_camera, &app_state, &viewport_settings);
-        desired_fb_w = new_size[0];
-        desired_fb_h = new_size[1];
+        const new_size = ui.renderImGui(sdl_context.texture, &frame_times, triangles, &world_camera, &app_state, &viewport_settings);
+        desired_fb_w = new_size.width;
+        desired_fb_h = new_size.height;
 
         c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), sdl_context.renderer);
 
