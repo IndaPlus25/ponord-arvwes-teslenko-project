@@ -76,6 +76,27 @@ fn sampleBilinearColor(
     return mixColor(top, bottom, blend_y);
 }
 
+// Add some color to grayscale textures
+fn tintGrayscale(color: u32, dark: u32, light: u32) u32 {
+    const r = colorChannel(color, 24);
+    const g = colorChannel(color, 16);
+    const b = colorChannel(color, 8);
+    const a = colorChannel(color, 0);
+
+    // Get brightness from tex color
+    // Magic numbers come from how humans percieve brightness from RGB
+    const brightness = std.math.clamp((r * 0.299 + g * 0.587 + b * 0.114) / 255.0, 0.0, 1.0);
+    const tint = mixColor(dark, light, brightness);
+
+    // Return packed color
+    return packRgba(
+        colorChannel(tint, 24),
+        colorChannel(tint, 16),
+        colorChannel(tint, 8),
+        a,
+    );
+}
+
 pub const TextureBuffer = struct {
     data: []u32,
     width: usize,
@@ -247,6 +268,7 @@ pub fn fillTriangle(
     zb: *ZBuffer,
     tb: TextureBuffer,
     db: f32,
+    should_tint_grayscale: bool,
 ) void {
     // Find the smallest possible rectangle that the triangle fits inside,
     // only loop through the pixels in this rectangle to avoid unnecessary work.
@@ -330,8 +352,13 @@ pub fn fillTriangle(
                     const color = tb.getColor(uPixel, vPixel);
                     const alpha = color & 0xff;
 
-                    if (alpha != 0) {
-                        fb.setPixel(ux, uy, color);
+                    const final_color = if (should_tint_grayscale)
+                        tintGrayscale(color, 0x4b4724ff, 0xb0a85cff)
+                    else
+                        color;
+
+                    if (alpha > 127) {
+                        fb.setPixel(ux, uy, final_color);
                         zb.setDepth(ux, uy, z_test);
                     }
                 }

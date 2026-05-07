@@ -189,6 +189,15 @@ fn texDepthBias(texture_id: usize) f32 {
     };
 }
 
+// TODO: Is there a better way than hardcoded stuff for this too?
+// This is for the road color tint
+fn texShouldTintRoad(texture_id: usize) bool {
+    return switch (texture_id) {
+        8, 36, 37 => true,
+        else => false,
+    };
+}
+
 fn renderScene(
     fb: render.FrameBuffer,
     zb: *render.ZBuffer,
@@ -266,15 +275,17 @@ fn renderScene(
 
             const tex_id: usize = @intCast(object.triangle_groups.items[tri_index]);
             const tb = object.textures.items[tex_id];
-            const db = texDepthBias(tex_id);
 
-            render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb, db);
+            const db = texDepthBias(tex_id);
+            const should_tint_grayscale = texShouldTintRoad(tex_id);
+
+            render.fillTriangle(v1, v2, v3, uv1, uv2, uv3, fb, zb, tb, db, should_tint_grayscale);
 
             if (cn == 4) {
                 const v4 = ca[3].?.toPixel(fb.width, fb.height);
                 const uv4 = cu[3].?;
 
-                render.fillTriangle(v1, v3, v4, uv1, uv3, uv4, fb, zb, tb, db);
+                render.fillTriangle(v1, v3, v4, uv1, uv3, uv4, fb, zb, tb, db, should_tint_grayscale);
                 drawn_triangles += 1;
             }
 
