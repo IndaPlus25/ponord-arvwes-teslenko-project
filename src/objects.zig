@@ -5,7 +5,7 @@ const render = @import("render.zig");
 // Import the yoinked image handler
 // https://github.com/nothings/stb/blob/master/stb_image.h
 const c = @cImport({
-    @cInclude("stb_image.h");
+    @cInclude("lib/stb_image.h");
 });
 
 // An object with a position

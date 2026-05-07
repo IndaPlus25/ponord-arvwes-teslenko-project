@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(b.path("src"));
 
     exe.addCSourceFile(.{
-        .file = b.path("src/stb_image_impl.c"),
+        .file = b.path("src/lib/stb_image_impl.c"),
         .flags = &.{ "-DSTBI_NO_SIMD", "-DSTBI_NO_HDR" },
     });
 

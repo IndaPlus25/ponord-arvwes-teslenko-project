@@ -18,9 +18,21 @@ const c = @cImport({
     @cInclude("dcimgui_impl_sdlrenderer3.h");
 });
 
-const screen_width: c_int = 1920;
-const screen_height: c_int = 1080;
-const screen_title: [*c]const u8 = "working-title";
+const WindowSettings = struct {
+    screen_width: c_int = 1920,
+    screen_height: c_int = 1080,
+    screen_title: [*c]const u8 = "working-title",
+};
+
+const AppState = struct {
+    is_running: bool = true,
+    mouse_captured: bool = true,
+};
+
+const ViewportSettings = struct {
+    render_scale: f32 = 0.25,
+    fixed_res: bool = true,
+};
 
 const n64_fb_width: c_int = 320;
 const n64_fb_height: c_int = 240;
@@ -57,17 +69,7 @@ const SdlContext = struct {
     }
 };
 
-const AppState = struct {
-    is_running: bool = true,
-    mouse_captured: bool = true,
-};
-
-const ViewportSettings = struct {
-    render_scale: f32 = 0.25,
-    fixed_res: bool = true,
-};
-
-fn initSdl(fb_w: c_int, fb_h: c_int) !SdlContext {
+fn initSdl(fb_w: c_int, fb_h: c_int, ws: WindowSettings) !SdlContext {
     var window: ?*c.SDL_Window = null;
     var renderer: ?*c.SDL_Renderer = null;
 
@@ -77,7 +79,7 @@ fn initSdl(fb_w: c_int, fb_h: c_int) !SdlContext {
     }
     errdefer c.SDL_Quit();
 
-    if (!c.SDL_CreateWindowAndRenderer(screen_title, screen_width, screen_height, 0, &window, &renderer)) {
+    if (!c.SDL_CreateWindowAndRenderer(ws.screen_title, ws.screen_width, ws.screen_height, 0, &window, &renderer)) {
         std.debug.print("SDL_CreateWindowAndRenderer failed: {s}\n", .{c.SDL_GetError()});
         return error.SdlWindowCreationFailed;
     }
@@ -108,7 +110,7 @@ fn initImGui(window: *c.SDL_Window, renderer: *c.SDL_Renderer) *c.ImGuiContext {
     const context = c.ImGui_CreateContext(null).?;
     const io = c.ImGui_GetIO();
     io.*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
-    io.*.IniFilename = "./src/config/imgui.ini"; // This makes the program both load and save the config automatically. TODO: Look into removing auto save of the config
+    io.*.IniFilename = "./src/config/imgui.ini";
     _ = c.cImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     _ = c.cImGui_ImplSDLRenderer3_Init(renderer);
     return context;
@@ -422,22 +424,21 @@ fn renderImGui(
 }
 
 pub fn main() !void {
-    const allocator = std.heap.page_allocator; // TODO Maybe move into a global variable, and look into using a more efficient allocator for our intents and purposes
+    const allocator = std.heap.page_allocator;
 
     var viewport_settings = ViewportSettings{};
+    const window_settings = WindowSettings{};
+    var app_state = AppState{};
+
     const initial_fb_w: c_int = n64_fb_width;
     const initial_fb_h: c_int = n64_fb_height;
-    var sdl_context = try initSdl(initial_fb_w, initial_fb_h);
+
+    var sdl_context = try initSdl(initial_fb_w, initial_fb_h, window_settings);
     defer c.SDL_Quit();
     defer sdl_context.deinit();
 
     const imgui_context = initImGui(sdl_context.window, sdl_context.renderer);
     defer deinitImGui(imgui_context);
-
-    var app_state = AppState{
-        .is_running = true,
-        .mouse_captured = false,
-    };
 
     var pixels: ?*anyopaque = null;
     var pitch: c_int = 0;
