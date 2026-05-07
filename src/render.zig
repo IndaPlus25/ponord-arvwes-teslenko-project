@@ -9,11 +9,11 @@ pub const Camera = struct {
     yaw: f32 = 0.0, // rotation around the up vector (left/right) in radians
     pitch: f32 = 0.0, // rotation around the camera right axis (up/down) in radians
     sensitivity: f32 = 0.0018, // mouse sensitivity
-    move_speed: f32 = 12.0, // move speed
+    move_speed: f32 = 18.0, // move speed
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
     fov: f32 = 60.0, // field of view in degrees
     near: f32 = 0.2, // distance to near plane
-    far: f32 = 300.0, // distance to far plane
+    far: f32 = 450.0, // distance to far plane
 };
 
 // TODO: Add these to ImGui so we can play with values
