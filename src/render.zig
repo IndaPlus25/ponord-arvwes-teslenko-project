@@ -13,16 +13,17 @@ pub const Camera = struct {
     up: Vec3 = .{ .x = 0, .y = 1, .z = 0 }, // y is up dir
     fov: f32 = 60.0, // field of view in degrees
     near: f32 = 0.2, // distance to near plane
-    far: f32 = 240.0, // distance to far plane
+    far: f32 = 300.0, // distance to far plane
 };
 
 // TODO: Add these to ImGui so we can play with values
 // TODO: Maybe put these in a struct?
-const sky_color: u32 = 0xb8bd7cff;
-const sky_horizon_color: u32 = 0xd4cf91ff;
-const fog_color: u32 = 0xb8b878ff;
-const fog_start: f32 = 40.0;
-const fog_end: f32 = 150.0;
+const sky_color: u32 = 0xaeb982ff;
+const sky_horizon_color: u32 = 0xd2cc95ff;
+const fog_color: u32 = 0xb8b982ff;
+const fog_strength: f32 = 1.25;
+pub const fog_start: f32 = 70.0; // used in main
+pub const fog_end: f32 = 220.0; // used in main
 
 // keeps UVs inside [0, 1], so textures tile normally
 fn repeatWrap(value: f32) f32 {
@@ -148,7 +149,8 @@ pub fn drawSky(fb: FrameBuffer) void {
 fn addFog(color: u32, depth: f32) u32 {
     if (depth <= fog_start) return color;
     if (depth >= fog_end) return fog_color;
-    const fog_amt = (depth - fog_start) / (fog_end - fog_start);
+    var fog_amt = (depth - fog_start) / (fog_end - fog_start);
+    fog_amt = std.math.clamp(fog_amt * fog_strength, 0.0, 1.0);
     return mixColor(color, fog_color, fog_amt);
 }
 

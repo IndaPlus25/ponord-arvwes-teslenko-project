@@ -251,6 +251,14 @@ fn renderScene(
                 null, // Incase the near face clipping gives us a fourth vertex (quad)
             };
 
+            // use the fog_end as far plane culling distance
+            if (ca[0].?.w >= render.fog_end and
+                ca[1].?.w >= render.fog_end and
+                ca[2].?.w >= render.fog_end)
+            {
+                continue;
+            }
+
             var cu = [4]?math.Vec2{
                 object.triangle_uvs.items[tri_index][0],
                 object.triangle_uvs.items[tri_index][1],
@@ -437,7 +445,7 @@ pub fn main() !void {
     // Load models
     var kokiri_model = try objects.loadModel("models/Kokiri Forest/KF.obj", &allocator);
 
-    const world_scale: f32 = 0.02;
+    const world_scale: f32 = 0.05;
 
     // Scale down the world
     for (kokiri_model.triangles.items) |*tri| {
