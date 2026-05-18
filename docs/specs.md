@@ -32,7 +32,7 @@ I think the project is feasible given the following timeline. The core rasteriza
 | 2 | Triangle rasterization (scanline fill), math utilities, backface culling | Done |
 | 3 | Mat4, matrix operations, screen projection pipeline, per-vertex attribute interpolation, Z-buffer | Done |
 | 4 | Camera struct with keyboard/mouse controls, OBJ model loading, basic shading and lighting | Done |
-| 5 | Performance tuning, bug fixes, edge cases, other tooling & testing | WIP |
+| 5 | Performance tuning, bug fixes, edge cases, other tooling & testing | Done |
 | 6+ | Stretch: non-Euclidean geometry experiments | |
 
 ## Division of work (subject to change)
